@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/littlekuo/go-lox/internal/util"
+	"github.com/littlekuo/glox-treewalk/internal/util"
 )
 
 var keywords = map[string]TokenType{
@@ -111,7 +111,6 @@ func (s *Scanner) scanToken() {
 			s.scanNumber()
 		} else if isAlpha(c) {
 			s.scanIdentifier()
-			// 新增部分结束
 		} else {
 			s.error(s.line, "Unexpected character.")
 		}

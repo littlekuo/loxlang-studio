@@ -1,4 +1,4 @@
-module github.com/littlekuo/go-lox
+module github.com/littlekuo/glox-treewalk
 
 go 1.24.2
 

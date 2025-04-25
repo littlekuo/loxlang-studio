@@ -12,6 +12,29 @@ import (
 	"golang.org/x/text/language"
 )
 
+var initedTypes = map[string]struct{}{}
+
+func generatedStructDef(writer io.Writer, structName string) error {
+	if structName == "" ||
+		structName == "any" ||
+		structName == "error" {
+		// builtin type
+		return nil
+	}
+	if _, ok := initedTypes[structName]; ok {
+		return nil
+	}
+	if structName == "Result" {
+		resultStructDef := fmt.Sprintf("type %s struct {\n\t Value any \n\t Err error\n}\n", structName)
+		if _, err := writer.Write([]byte(resultStructDef)); err != nil {
+			return fmt.Errorf("failed to write result struct definition: %s", err.Error())
+		}
+		writer.Write([]byte("\n"))
+	}
+	initedTypes[structName] = struct{}{}
+	return nil
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintf(os.Stderr, "Usage: ast-generator <output directory>\n")
@@ -20,16 +43,25 @@ func main() {
 
 	outputDir := os.Args[1]
 	if err := defineAst(outputDir, "Expr", []string{
+		"Assign   : Token name, Expr value",
 		"Binary: Expr left, Token operator, Expr right",
 		"Grouping: Expr expression",
 		"Literal: any value",
 		"Unary: Expr right, Token operator",
-	}); err != nil {
+		"Variable : Token name",
+	}, "Result"); err != nil {
+		log.Fatal(err)
+	}
+	if err := defineAst(outputDir, "Stmt", []string{
+		"Expression : Expr expression",
+		"Print      : Expr expression",
+		"Var        : Token name, Expr initializer",
+	}, "error"); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func defineAst(outputDir string, baseName string, types []string) error {
+func defineAst(outputDir string, baseName string, types []string, returnTypeName string) error {
 	path := filepath.Join(outputDir, strings.ToLower(baseName)+".go")
 	file, err := os.Create(path)
 	if err != nil {
@@ -44,19 +76,15 @@ func defineAst(outputDir string, baseName string, types []string) error {
 	}
 	file.WriteString("\n")
 
-	// write result struct definition
-	resultStructDef := "type Result struct {\n\t Value interface{}\n\t Err error\n}\n"
-	if _, err = file.WriteString(resultStructDef); err != nil {
-		return fmt.Errorf("failed to write result struct definition: %s", err.Error())
+	if gErr := generatedStructDef(file, returnTypeName); gErr != nil {
+		return gErr
 	}
-	file.WriteString("\n")
-
 	// write visitor interface definition
-	visitorInterface := "type Visitor interface {\n"
+	visitorInterface := fmt.Sprintf("type %sVisitor interface {\n", baseName)
 	for _, typ := range types {
 		parts := strings.Split(typ, ":")
 		structName := strings.TrimSpace(parts[0])
-		visitorInterface += fmt.Sprintf("\tVisit%s%s(*%s) Result\n", structName, baseName, structName)
+		visitorInterface += fmt.Sprintf("\tVisit%s%s(*%s) %s\n", structName, baseName, structName, returnTypeName)
 	}
 	visitorInterface += "}\n"
 	if _, err = file.WriteString(visitorInterface); err != nil {
@@ -65,7 +93,7 @@ func defineAst(outputDir string, baseName string, types []string) error {
 	file.WriteString("\n")
 
 	// write interface definition
-	interfaceDef := fmt.Sprintf("type %s interface {\n\t Accept(Visitor) Result\n}\n", baseName)
+	interfaceDef := fmt.Sprintf("type %s interface {\n\t Accept(%sVisitor) %s\n}\n", baseName, baseName, returnTypeName)
 	if _, err = file.WriteString(interfaceDef); err != nil {
 		return fmt.Errorf("failed to write interface definition: %s", err.Error())
 	}
@@ -76,14 +104,14 @@ func defineAst(outputDir string, baseName string, types []string) error {
 		parts := strings.Split(types[idx], ":")
 		structName := strings.TrimSpace(parts[0])
 		fieldDefinitions := strings.TrimSpace(parts[1])
-		defineType(file, baseName, structName, fieldDefinitions)
+		defineType(file, baseName, structName, fieldDefinitions, returnTypeName)
 		file.WriteString("\n")
 	}
 
 	return nil
 }
 
-func defineType(writer io.Writer, baseName, structName, fieldList string) {
+func defineType(writer io.Writer, baseName, structName, fieldList, resultTypeName string) {
 	// (example："Expr left, Token operator, Expr right"）
 	fields := strings.Split(fieldList, ", ")
 
@@ -119,7 +147,11 @@ func defineType(writer io.Writer, baseName, structName, fieldList string) {
 	fmt.Fprintf(writer, "}\n")
 
 	// 实现表达式接口
-	fmt.Fprintf(writer, "func (n *%s) Accept(v Visitor) Result {\n", structName)
-	fmt.Fprintf(writer, "\treturn v.Visit%s%s(n)\n", structName, baseName)
+	fmt.Fprintf(writer, "func (n *%s) Accept(v %sVisitor) %s {\n", structName, baseName, resultTypeName)
+	if resultTypeName != "" {
+		fmt.Fprintf(writer, "\treturn v.Visit%s%s(n)\n", structName, baseName)
+	} else {
+		fmt.Fprintf(writer, "\tv.Visit%s%s(n)\n", structName, baseName)
+	}
 	fmt.Fprintf(writer, "}\n")
 }
