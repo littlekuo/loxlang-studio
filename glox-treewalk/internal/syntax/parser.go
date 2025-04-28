@@ -37,9 +37,13 @@ varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
 
 statement      → exprStmt
                | printStmt ;
+			   | block ;
+			   | ifStmt
 
 exprStmt       →  expression ";" ;
 printStmt      → "print" expression ";" ;
+block         → "{" declaration* "}" ;
+ifStmt         → "if" "(" expression ")" statement ( "else" statement )? ;
 */
 
 type Parser struct {
@@ -99,10 +103,56 @@ func (p *Parser) parseVarDecl() (Stmt, error) {
 }
 
 func (p *Parser) parseStmt() (Stmt, error) {
+	if p.match(TOKEN_IF) {
+		return p.parseIfStmt()
+	}
 	if p.match(TOKEN_PRINT) {
 		return p.parsePrintStmt()
 	}
+	if p.match(TOKEN_LEFT_BRACE) {
+		return p.parseBlockStmt()
+	}
 	return p.parseExprStmt()
+}
+
+func (p *Parser) parseIfStmt() (Stmt, error) {
+	if cErr := p.consume(TOKEN_LEFT_PAREN, "Expect '(' after 'if'"); cErr != nil {
+		return nil, cErr
+	}
+	condition, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if cErr := p.consume(TOKEN_RIGHT_PAREN, "Expect ')' after if condition"); cErr != nil {
+		return nil, cErr
+	}
+	thenBranch, err := p.parseStmt()
+	if err != nil {
+		return nil, err
+	}
+	var elseBranch Stmt
+	if p.match(TOKEN_ELSE) {
+		elseBranch, err = p.parseStmt()
+		if err != nil {
+			return nil, err
+		}
+	}
+	return NewIf(condition, thenBranch, elseBranch), nil
+}
+
+func (p *Parser) parseBlockStmt() (Stmt, error) {
+	stmts := make([]Stmt, 0)
+	for !p.check(TOKEN_RIGHT_BRACE) && !p.isEnd() {
+		stmt, err := p.parseDeclaration()
+		if err != nil {
+			return nil, err
+		}
+		stmts = append(stmts, stmt)
+	}
+	if cErr := p.consume(TOKEN_RIGHT_BRACE, "Expect '}' after block"); cErr != nil {
+		return nil, cErr
+	}
+	return NewBlock(stmts), nil
 }
 
 func (p *Parser) parsePrintStmt() (Stmt, error) {

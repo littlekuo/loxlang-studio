@@ -8,29 +8,49 @@ import (
 )
 
 type Environment struct {
-	valueMap map[string]interface{}
+	valueMap  map[string]interface{}
+	enclosing *Environment
 }
 
-func (e *Environment) define(name string, val any) {
+func NewEnvironment(e *Environment) *Environment {
+	// e is nil means top level
+	return &Environment{
+		valueMap:  make(map[string]interface{}),
+		enclosing: e,
+	}
+}
+
+func (e *Environment) define(name string, val any) error {
 	if e.valueMap == nil {
 		e.valueMap = make(map[string]interface{})
 	}
+	if _, ok := e.valueMap[name]; ok {
+		return fmt.Errorf("re-declare variable %s", name)
+	}
 	e.valueMap[name] = val
+	return nil
 }
 
 func (e *Environment) get(name syntax.Token) (interface{}, error) {
 	val, ok := e.valueMap[name.Lexeme]
-	if !ok {
-		return nil, fmt.Errorf("undefined variable '%s'", name.Lexeme)
+	if ok {
+		return val, nil
 	}
-	return val, nil
+	if e.enclosing != nil {
+		return e.enclosing.get(name)
+	}
+	return nil, fmt.Errorf("undefined variable '%s'", name.Lexeme)
 }
 
-func (e *Environment) assign(name syntax.Token, value any) {
-	if e.valueMap == nil {
-		e.valueMap = make(map[string]interface{})
+func (e *Environment) assign(name syntax.Token, value any) error {
+	if _, ok := e.valueMap[name.Lexeme]; ok {
+		e.valueMap[name.Lexeme] = value
+		return nil
 	}
-	e.valueMap[name.Lexeme] = value
+	if e.enclosing != nil {
+		return e.enclosing.assign(name, value)
+	}
+	return fmt.Errorf("undefined variable '%s'", name.Lexeme)
 }
 
 type Interpreter struct {
@@ -62,6 +82,19 @@ func (a *Interpreter) execute(stmt syntax.Stmt) error {
 	return stmt.Accept(a)
 }
 
+func (a *Interpreter) VisitIfStmt(stmt *syntax.If) error {
+	condResult := stmt.Condition.Accept(a)
+	if condResult.Err != nil {
+		return condResult.Err
+	}
+	if isTruthy(condResult.Value) {
+		return a.execute(stmt.Thenbranch)
+	} else if stmt.Elsebranch != nil {
+		return a.execute(stmt.Elsebranch)
+	}
+	return nil
+}
+
 func (a *Interpreter) VisitVarStmt(stmt *syntax.Var) error {
 	var value any
 	if stmt.Initializer != nil {
@@ -71,8 +104,18 @@ func (a *Interpreter) VisitVarStmt(stmt *syntax.Var) error {
 		}
 		value = result.Value
 	}
-	a.env.define(stmt.Name.Lexeme, value)
+	return a.env.define(stmt.Name.Lexeme, value)
+}
 
+func (a *Interpreter) VisitBlockStmt(stmt *syntax.Block) error {
+	previousEnv := a.env
+	a.env = NewEnvironment(a.env)
+	defer func() { a.env = previousEnv }()
+	for _, stmt := range stmt.Statements {
+		if err := a.execute(stmt); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -98,7 +141,9 @@ func (a *Interpreter) VisitAssignExpr(expr *syntax.Assign) syntax.Result {
 	if result.Err != nil {
 		return syntax.Result{Err: result.Err}
 	}
-	a.env.assign(expr.Name, result.Value)
+	if err := a.env.assign(expr.Name, result.Value); err != nil {
+		return syntax.Result{Err: err}
+	}
 	return result
 }
 

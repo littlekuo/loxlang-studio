@@ -2,13 +2,27 @@
 package syntax
 
 type StmtVisitor interface {
+	VisitBlockStmt(*Block) error
 	VisitExpressionStmt(*Expression) error
 	VisitPrintStmt(*Print) error
 	VisitVarStmt(*Var) error
+	VisitIfStmt(*If) error
 }
 
 type Stmt interface {
 	 Accept(StmtVisitor) error
+}
+
+type Block struct {
+	Statements []Stmt
+}
+func NewBlock(statements []Stmt) *Block {
+	return &Block{
+		Statements: statements,
+	}
+}
+func (n *Block) Accept(v StmtVisitor) error {
+	return v.VisitBlockStmt(n)
 }
 
 type Expression struct {
@@ -47,5 +61,21 @@ func NewVar(name Token, initializer Expr) *Var {
 }
 func (n *Var) Accept(v StmtVisitor) error {
 	return v.VisitVarStmt(n)
+}
+
+type If struct {
+	Condition Expr
+	Thenbranch Stmt
+	Elsebranch Stmt
+}
+func NewIf(condition Expr, thenbranch Stmt, elsebranch Stmt) *If {
+	return &If{
+		Condition: condition,
+		Thenbranch: thenbranch,
+		Elsebranch: elsebranch,
+	}
+}
+func (n *If) Accept(v StmtVisitor) error {
+	return v.VisitIfStmt(n)
 }
 

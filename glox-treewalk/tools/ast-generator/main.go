@@ -53,9 +53,11 @@ func main() {
 		log.Fatal(err)
 	}
 	if err := defineAst(outputDir, "Stmt", []string{
+		"Block      : []Stmt statements",
 		"Expression : Expr expression",
 		"Print      : Expr expression",
 		"Var        : Token name, Expr initializer",
+		"If         : Expr condition, Stmt thenBranch, Stmt elseBranch",
 	}, "error"); err != nil {
 		log.Fatal(err)
 	}

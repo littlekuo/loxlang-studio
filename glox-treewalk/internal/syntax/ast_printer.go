@@ -20,6 +20,34 @@ func (a *AstPrinter) PrintStmts(stmts []Stmt) error {
 	return nil
 }
 
+func (a *AstPrinter) VisitBlockStmt(stmt *Block) error {
+	a.desc += "(block"
+	for _, stmt := range stmt.Statements {
+		if err := stmt.Accept(a); err != nil {
+			return err
+		}
+	}
+	a.desc += ")"
+	return nil
+}
+
+func (a *AstPrinter) VisitIfStmt(stmt *If) error {
+	a.desc += "(if "
+	a.desc += a.PrintExpr(stmt.Condition)
+	a.desc += " "
+	if err := stmt.Thenbranch.Accept(a); err != nil {
+		return err
+	}
+	a.desc += " "
+	if stmt.Elsebranch != nil {
+		if err := stmt.Elsebranch.Accept(a); err != nil {
+			return err
+		}
+	}
+	a.desc += ")"
+	return nil
+}
+
 func (a *AstPrinter) VisitExpressionStmt(stmt *Expression) error {
 	a.desc += a.PrintExpr(stmt.Expression)
 	return nil
