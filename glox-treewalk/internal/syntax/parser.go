@@ -18,7 +18,10 @@ Unary: 	     ! -	       Right
 
 expression ->  assignment
 assignment ->  IDENTIFIER "=" assignment
-                | equality ;
+                | logical_or
+
+logical_or  ->  logical_and ( "or" logical_and )*
+logical_and ->  equality ( "and" equality )*
 equality   ->  comparison ( ( "!=" | "==" ) comparison )*
 comparison ->  term ( ( ">" | ">=" | "<" | "<=" ) term )*
 term       ->  factor ( ( "-" | "+" ) factor )*
@@ -27,29 +30,37 @@ unary      ->  ( "!" | "-" ) unary | primary
 primary    ->  NUMBER | STRING | "false" | "true" | "nil" | "(" expr ")" | IDENTIFIER
 
 
-program        → declaration* EOF ;
+program        → declaration* EOF
 
 declaration    → varDecl
-               | statement ;
+               | statement
 
-varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
+varDecl        → "var" IDENTIFIER ( "=" expression )? ";"
 
 
 statement      → exprStmt
-               | printStmt ;
-			   | block ;
+               | printStmt
+			   | block
 			   | ifStmt
+			   | whileStmt
+			   | forStmt
+			   | breakStmt
 
 exprStmt       →  expression ";" ;
 printStmt      → "print" expression ";" ;
 block         → "{" declaration* "}" ;
 ifStmt         → "if" "(" expression ")" statement ( "else" statement )? ;
+whileStmt      → "while" "(" expression ")" statement
+forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
+				  expression? ";" expression? ")" statement
+breakStmt      → "break" ";"
 */
 
 type Parser struct {
-	Tokens   []Token
-	Current  int
-	parseErr error
+	Tokens    []Token
+	Current   int
+	parseErr  error
+	loopDepth int
 }
 
 func NewParser(tokens []Token) *Parser {
@@ -83,7 +94,7 @@ func (p *Parser) parseDeclaration() (Stmt, error) {
 }
 
 func (p *Parser) parseVarDecl() (Stmt, error) {
-	if cErr := p.consume(TOKEN_IDENTIFIER, "Expect variable name"); cErr != nil {
+	if cErr := p.consume(TOKEN_IDENTIFIER, "expect variable name"); cErr != nil {
 		return nil, cErr
 	}
 	name := p.previous()
@@ -96,7 +107,7 @@ func (p *Parser) parseVarDecl() (Stmt, error) {
 		}
 	}
 
-	if cErr := p.consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration"); cErr != nil {
+	if cErr := p.consume(TOKEN_SEMICOLON, "expect ';' after variable declaration"); cErr != nil {
 		return nil, cErr
 	}
 	return NewVar(name, initializer), nil
@@ -109,21 +120,121 @@ func (p *Parser) parseStmt() (Stmt, error) {
 	if p.match(TOKEN_PRINT) {
 		return p.parsePrintStmt()
 	}
+	if p.match(TOKEN_WHILE) {
+		return p.parseWhileStmt()
+	}
+	if p.match(TOKEN_FOR) {
+		return p.parseForStmt()
+	}
+	if p.match(TOKEN_BREAK) {
+		return p.parseBreakStmt()
+	}
 	if p.match(TOKEN_LEFT_BRACE) {
 		return p.parseBlockStmt()
 	}
 	return p.parseExprStmt()
 }
 
+func (p *Parser) parseBreakStmt() (Stmt, error) {
+	if p.loopDepth == 0 {
+		return nil, p.error(p.previous(), "break not inside loop")
+	}
+	if cErr := p.consume(TOKEN_SEMICOLON, "expect ';' after break"); cErr != nil {
+		return nil, cErr
+	}
+	return NewBreak(p.previous()), nil
+}
+
+// desugar for loop
+func (p *Parser) parseForStmt() (Stmt, error) {
+	p.loopDepth++
+	defer func() { p.loopDepth-- }()
+	var err error
+	if err = p.consume(TOKEN_LEFT_PAREN, "expect '(' after 'for'"); err != nil {
+		return nil, err
+	}
+	var initializer Stmt
+	if p.match(TOKEN_SEMICOLON) {
+
+	} else if p.match(TOKEN_VAR) {
+		initializer, err = p.parseVarDecl()
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		initializer, err = p.parseExprStmt()
+		if err != nil {
+			return nil, err
+		}
+	}
+	var condition Expr
+	if !p.check(TOKEN_SEMICOLON) {
+		condition, err = p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+	}
+	if cErr := p.consume(TOKEN_SEMICOLON, "expect ';' after loop condition"); cErr != nil {
+		return nil, cErr
+	}
+	var increment Expr
+	if !p.check(TOKEN_RIGHT_PAREN) {
+		increment, err = p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+	}
+	if cErr := p.consume(TOKEN_RIGHT_PAREN, "expect ')' after for clauses"); cErr != nil {
+		return nil, cErr
+	}
+	var body Stmt
+	body, err = p.parseStmt()
+	if err != nil {
+		return nil, err
+	}
+	if increment != nil {
+		body = NewBlock([]Stmt{body, NewExpression(increment)})
+	}
+	if condition == nil {
+		// if condition is nil, use true
+		condition = NewLiteral(true)
+	}
+	body = NewWhile(condition, body)
+	if initializer != nil {
+		body = NewBlock([]Stmt{initializer, body})
+	}
+	return body, nil
+}
+
+func (p *Parser) parseWhileStmt() (Stmt, error) {
+	p.loopDepth++
+	defer func() { p.loopDepth-- }()
+	if err := p.consume(TOKEN_LEFT_PAREN, "expect '(' after 'while'."); err != nil {
+		return nil, err
+	}
+	condition, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	if cErr := p.consume(TOKEN_RIGHT_PAREN, "expect ')' after while condition"); cErr != nil {
+		return nil, cErr
+	}
+	body, err := p.parseStmt()
+	if err != nil {
+		return nil, err
+	}
+	return NewWhile(condition, body), nil
+}
+
 func (p *Parser) parseIfStmt() (Stmt, error) {
-	if cErr := p.consume(TOKEN_LEFT_PAREN, "Expect '(' after 'if'"); cErr != nil {
+	if cErr := p.consume(TOKEN_LEFT_PAREN, "expect '(' after 'if'"); cErr != nil {
 		return nil, cErr
 	}
 	condition, err := p.parseExpr()
 	if err != nil {
 		return nil, err
 	}
-	if cErr := p.consume(TOKEN_RIGHT_PAREN, "Expect ')' after if condition"); cErr != nil {
+	if cErr := p.consume(TOKEN_RIGHT_PAREN, "expect ')' after if condition"); cErr != nil {
 		return nil, cErr
 	}
 	thenBranch, err := p.parseStmt()
@@ -149,7 +260,7 @@ func (p *Parser) parseBlockStmt() (Stmt, error) {
 		}
 		stmts = append(stmts, stmt)
 	}
-	if cErr := p.consume(TOKEN_RIGHT_BRACE, "Expect '}' after block"); cErr != nil {
+	if cErr := p.consume(TOKEN_RIGHT_BRACE, "expect '}' after block"); cErr != nil {
 		return nil, cErr
 	}
 	return NewBlock(stmts), nil
@@ -160,7 +271,7 @@ func (p *Parser) parsePrintStmt() (Stmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	if cErr := p.consume(TOKEN_SEMICOLON, "Expect ';' after value"); cErr != nil {
+	if cErr := p.consume(TOKEN_SEMICOLON, "expect ';' after value"); cErr != nil {
 		return nil, cErr
 	}
 	return &Print{Expression: expr}, nil
@@ -171,7 +282,7 @@ func (p *Parser) parseExprStmt() (Stmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	if cErr := p.consume(TOKEN_SEMICOLON, "Expect ';' after value"); cErr != nil {
+	if cErr := p.consume(TOKEN_SEMICOLON, "expect ';' after value"); cErr != nil {
 		return nil, cErr
 	}
 	return &Expression{Expression: expr}, nil
@@ -182,7 +293,7 @@ func (p *Parser) parseExpr() (Expr, error) {
 }
 
 func (p *Parser) parseAssignment() (Expr, error) {
-	expr, pErr := p.parseEquality()
+	expr, pErr := p.parseLogicalOr()
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -200,6 +311,42 @@ func (p *Parser) parseAssignment() (Expr, error) {
 
 		return nil, p.error(equalToken, "Invalid assignment target.")
 	}
+	return expr, nil
+}
+
+func (p *Parser) parseLogicalOr() (Expr, error) {
+	expr, err := p.parseLogicalAnd()
+	if err != nil {
+		return nil, err
+	}
+
+	for p.match(TOKEN_OR) {
+		op := p.previous()
+		right, err := p.parseLogicalAnd()
+		if err != nil {
+			return nil, err
+		}
+		expr = NewLogical(expr, op, right)
+	}
+
+	return expr, nil
+}
+
+func (p *Parser) parseLogicalAnd() (Expr, error) {
+	expr, err := p.parseEquality()
+	if err != nil {
+		return nil, err
+	}
+
+	for p.match(TOKEN_AND) {
+		op := p.previous()
+		right, err := p.parseEquality()
+		if err != nil {
+			return nil, err
+		}
+		expr = NewLogical(expr, op, right)
+	}
+
 	return expr, nil
 }
 
@@ -312,12 +459,12 @@ func (p *Parser) parsePrimary() (Expr, error) {
 		if err != nil {
 			return nil, err
 		}
-		if cErr := p.consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression"); cErr != nil {
+		if cErr := p.consume(TOKEN_RIGHT_PAREN, "expect ')' after expression"); cErr != nil {
 			return nil, cErr
 		}
 		return expr, nil
 	}
-	return nil, p.error(p.peek(), "Expect expression")
+	return nil, p.error(p.peek(), "expect expression")
 }
 
 func (p *Parser) match(tokenTypes ...TokenType) bool {

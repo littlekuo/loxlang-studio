@@ -48,6 +48,7 @@ const (
 	TOKEN_TRUE
 	TOKEN_VAR
 	TOKEN_WHILE
+	TOKEN_BREAK
 
 	TOKEN_EOF
 )
@@ -95,6 +96,7 @@ var (
 		TOKEN_TRUE:   "true",
 		TOKEN_VAR:    "var",
 		TOKEN_WHILE:  "while",
+		TOKEN_BREAK:  "break",
 
 		TOKEN_EOF: "EOF",
 	}

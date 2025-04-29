@@ -7,6 +7,8 @@ type StmtVisitor interface {
 	VisitPrintStmt(*Print) error
 	VisitVarStmt(*Var) error
 	VisitIfStmt(*If) error
+	VisitWhileStmt(*While) error
+	VisitBreakStmt(*Break) error
 }
 
 type Stmt interface {
@@ -77,5 +79,31 @@ func NewIf(condition Expr, thenbranch Stmt, elsebranch Stmt) *If {
 }
 func (n *If) Accept(v StmtVisitor) error {
 	return v.VisitIfStmt(n)
+}
+
+type While struct {
+	Condition Expr
+	Body Stmt
+}
+func NewWhile(condition Expr, body Stmt) *While {
+	return &While{
+		Condition: condition,
+		Body: body,
+	}
+}
+func (n *While) Accept(v StmtVisitor) error {
+	return v.VisitWhileStmt(n)
+}
+
+type Break struct {
+	Keyword Token
+}
+func NewBreak(keyword Token) *Break {
+	return &Break{
+		Keyword: keyword,
+	}
+}
+func (n *Break) Accept(v StmtVisitor) error {
+	return v.VisitBreakStmt(n)
 }
 

@@ -1,11 +1,14 @@
 package interpreter
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
 	"github.com/littlekuo/glox-treewalk/internal/syntax"
 )
+
+var breakErr = fmt.Errorf("break")
 
 type Environment struct {
 	valueMap  map[string]interface{}
@@ -82,6 +85,29 @@ func (a *Interpreter) execute(stmt syntax.Stmt) error {
 	return stmt.Accept(a)
 }
 
+func (a *Interpreter) VisitBreakStmt(stmt *syntax.Break) error {
+	return breakErr
+}
+
+func (a *Interpreter) VisitWhileStmt(stmt *syntax.While) error {
+	for {
+		condResult := stmt.Condition.Accept(a)
+		if condResult.Err != nil {
+			return condResult.Err
+		}
+		if !isTruthy(condResult.Value) {
+			break
+		}
+		if err := a.execute(stmt.Body); err != nil {
+			if errors.Is(err, breakErr) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
+}
+
 func (a *Interpreter) VisitIfStmt(stmt *syntax.If) error {
 	condResult := stmt.Condition.Accept(a)
 	if condResult.Err != nil {
@@ -134,6 +160,23 @@ func (a *Interpreter) VisitPrintStmt(stmt *syntax.Print) error {
 	}
 	fmt.Printf("%v\n", result.Value)
 	return nil
+}
+
+func (a *Interpreter) VisitLogicalExpr(expr *syntax.Logical) syntax.Result {
+	left := expr.Left.Accept(a)
+	if left.Err != nil {
+		return syntax.Result{Err: left.Err}
+	}
+	if expr.Operator.TokenType == syntax.TOKEN_OR {
+		if isTruthy(left.Value) {
+			return left
+		}
+	} else {
+		if !isTruthy(left.Value) {
+			return left
+		}
+	}
+	return expr.Right.Accept(a)
 }
 
 func (a *Interpreter) VisitAssignExpr(expr *syntax.Assign) syntax.Result {

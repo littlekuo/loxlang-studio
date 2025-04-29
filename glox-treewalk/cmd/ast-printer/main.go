@@ -47,13 +47,13 @@ func main() {
 	scanner := syntax.NewScanner(string(source))
 	tokens := scanner.ScanTokens()
 	if err := scanner.GetError(); err != nil {
-		fmt.Printf("scan tokens failed, err [%s]", err.Error())
+		return
 	}
 	parser := syntax.NewParser(tokens)
 	stmts := parser.Parse()
 	if err := parser.GetError(); err != nil {
-		fmt.Printf("parse failed, err [%s]", err.Error())
+		return
 	}
 	astPrinter := &syntax.AstPrinter{}
-	astPrinter.PrintStmts(stmts)
+	astPrinter.TopPrintStmts(stmts)
 }

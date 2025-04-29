@@ -47,6 +47,8 @@ func main() {
 		"Binary: Expr left, Token operator, Expr right",
 		"Grouping: Expr expression",
 		"Literal: any value",
+		// logical are shortcuts, different from binary
+		"Logical  : Expr left, Token operator, Expr right",
 		"Unary: Expr right, Token operator",
 		"Variable : Token name",
 	}, "Result"); err != nil {
@@ -58,6 +60,8 @@ func main() {
 		"Print      : Expr expression",
 		"Var        : Token name, Expr initializer",
 		"If         : Expr condition, Stmt thenBranch, Stmt elseBranch",
+		"While      : Expr condition, Stmt body",
+		"Break      : Token keyword",
 	}, "error"); err != nil {
 		log.Fatal(err)
 	}

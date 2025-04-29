@@ -6,64 +6,101 @@ import (
 )
 
 type AstPrinter struct {
-	desc string
+	desc  string
+	ident int
 }
 
-func (a *AstPrinter) PrintStmts(stmts []Stmt) error {
+func (a *AstPrinter) TopPrintStmts(stmts []Stmt) error {
+	fmt.Println("------- result -------")
 	for _, stmt := range stmts {
-		if err := stmt.Accept(a); err != nil {
+		a.ident = 0
+		if err := a.printStmt(stmt); err != nil {
 			return err
 		}
-		a.desc += "\n"
 	}
 	fmt.Println(a.desc)
 	return nil
 }
 
+func (a *AstPrinter) printStmt(stmt Stmt) error {
+	if err := stmt.Accept(a); err != nil {
+		return err
+	}
+	a.desc += "\n"
+	return nil
+}
+
+func (a *AstPrinter) VisitBreakStmt(stmt *Break) error {
+	a.desc += indentString(a.ident, "break")
+	return nil
+}
+
 func (a *AstPrinter) VisitBlockStmt(stmt *Block) error {
-	a.desc += "(block"
+	a.desc += indentString(a.ident, "(block \n")
+	a.ident += 2
 	for _, stmt := range stmt.Statements {
-		if err := stmt.Accept(a); err != nil {
+		if err := a.printStmt(stmt); err != nil {
 			return err
 		}
 	}
-	a.desc += ")"
+	a.ident -= 2
+	a.desc += indentString(a.ident, ")")
+	return nil
+}
+
+func (a *AstPrinter) VisitWhileStmt(stmt *While) error {
+	a.desc += indentString(a.ident, "(while ")
+	a.desc += a.PrintExpr(stmt.Condition)
+	a.desc += "\n"
+	a.ident += 2
+	if err := a.printStmt(stmt.Body); err != nil {
+		return err
+	}
+	a.ident -= 2
+	a.desc += indentString(a.ident, ")")
 	return nil
 }
 
 func (a *AstPrinter) VisitIfStmt(stmt *If) error {
-	a.desc += "(if "
+	a.desc += indentString(a.ident, "(if ")
 	a.desc += a.PrintExpr(stmt.Condition)
-	a.desc += " "
-	if err := stmt.Thenbranch.Accept(a); err != nil {
+	a.desc += "\n"
+	a.ident += 2
+	if err := a.printStmt(stmt.Thenbranch); err != nil {
 		return err
 	}
-	a.desc += " "
+	a.ident -= 2
+	a.desc += indentString(a.ident, "else")
+	a.ident += 2
 	if stmt.Elsebranch != nil {
-		if err := stmt.Elsebranch.Accept(a); err != nil {
+		if err := a.printStmt(stmt.Elsebranch); err != nil {
 			return err
 		}
 	}
-	a.desc += ")"
+	a.ident -= 2
+	a.desc += indentString(a.ident, ")")
 	return nil
 }
 
 func (a *AstPrinter) VisitExpressionStmt(stmt *Expression) error {
-	a.desc += a.PrintExpr(stmt.Expression)
+	a.desc += indentString(a.ident, a.PrintExpr(stmt.Expression))
 	return nil
 }
 
 func (a *AstPrinter) VisitPrintStmt(stmt *Print) error {
-	a.desc += "(print "
+	a.desc += indentString(a.ident, "(print ")
 	a.desc += a.PrintExpr(stmt.Expression)
 	a.desc += ")"
 	return nil
 }
 
 func (a *AstPrinter) VisitVarStmt(stmt *Var) error {
-	a.desc += "(define " + stmt.Name.Lexeme + " "
+	a.desc += indentString(a.ident, "(define "+stmt.Name.Lexeme+" ")
 	if stmt.Initializer != nil {
 		a.desc += a.PrintExpr(stmt.Initializer)
+	}
+	if stmt.Initializer == nil {
+		a.desc += "nil"
 	}
 	a.desc += ")"
 	return nil
@@ -71,6 +108,10 @@ func (a *AstPrinter) VisitVarStmt(stmt *Var) error {
 
 func (a *AstPrinter) PrintExpr(expr Expr) string {
 	return expr.Accept(a).Value.(string)
+}
+
+func (a *AstPrinter) VisitLogicalExpr(expr *Logical) Result {
+	return Result{Value: a.parenthesize(expr.Operator.Lexeme, expr.Left, expr.Right)}
 }
 
 func (a *AstPrinter) VisitAssignExpr(expr *Assign) Result {
@@ -111,4 +152,8 @@ func (a *AstPrinter) parenthesize(operatorName string, exprs ...Expr) string {
 	builder.WriteString(")")
 
 	return builder.String()
+}
+
+func indentString(repeat int, content string) string {
+	return strings.Repeat(" ", repeat) + content
 }
