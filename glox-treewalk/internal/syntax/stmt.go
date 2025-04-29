@@ -9,6 +9,8 @@ type StmtVisitor interface {
 	VisitIfStmt(*If) error
 	VisitWhileStmt(*While) error
 	VisitBreakStmt(*Break) error
+	VisitForDesugaredWhileStmt(*ForDesugaredWhile) error
+	VisitContinueStmt(*Continue) error
 }
 
 type Stmt interface {
@@ -105,5 +107,33 @@ func NewBreak(keyword Token) *Break {
 }
 func (n *Break) Accept(v StmtVisitor) error {
 	return v.VisitBreakStmt(n)
+}
+
+type ForDesugaredWhile struct {
+	Condition Expr
+	Body Stmt
+	Increment Expr
+}
+func NewForDesugaredWhile(condition Expr, body Stmt, increment Expr) *ForDesugaredWhile {
+	return &ForDesugaredWhile{
+		Condition: condition,
+		Body: body,
+		Increment: increment,
+	}
+}
+func (n *ForDesugaredWhile) Accept(v StmtVisitor) error {
+	return v.VisitForDesugaredWhileStmt(n)
+}
+
+type Continue struct {
+	Keyword Token
+}
+func NewContinue(keyword Token) *Continue {
+	return &Continue{
+		Keyword: keyword,
+	}
+}
+func (n *Continue) Accept(v StmtVisitor) error {
+	return v.VisitContinueStmt(n)
 }
 

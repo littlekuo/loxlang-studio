@@ -45,6 +45,7 @@ statement      → exprStmt
 			   | whileStmt
 			   | forStmt
 			   | breakStmt
+			   | continueStmt
 
 exprStmt       →  expression ";" ;
 printStmt      → "print" expression ";" ;
@@ -54,6 +55,7 @@ whileStmt      → "while" "(" expression ")" statement
 forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
 				  expression? ";" expression? ")" statement
 breakStmt      → "break" ";"
+continueStmt   → "continue" ";"
 */
 
 type Parser struct {
@@ -129,6 +131,9 @@ func (p *Parser) parseStmt() (Stmt, error) {
 	if p.match(TOKEN_BREAK) {
 		return p.parseBreakStmt()
 	}
+	if p.match(TOKEN_CONTINUE) {
+		return p.parseContinueStmt()
+	}
 	if p.match(TOKEN_LEFT_BRACE) {
 		return p.parseBlockStmt()
 	}
@@ -143,6 +148,16 @@ func (p *Parser) parseBreakStmt() (Stmt, error) {
 		return nil, cErr
 	}
 	return NewBreak(p.previous()), nil
+}
+
+func (p *Parser) parseContinueStmt() (Stmt, error) {
+	if p.loopDepth == 0 {
+		return nil, p.error(p.previous(), "continue not inside loop")
+	}
+	if cErr := p.consume(TOKEN_SEMICOLON, "expect ';' after continue"); cErr != nil {
+		return nil, cErr
+	}
+	return NewContinue(p.previous()), nil
 }
 
 // desugar for loop
@@ -192,14 +207,15 @@ func (p *Parser) parseForStmt() (Stmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	if increment != nil {
-		body = NewBlock([]Stmt{body, NewExpression(increment)})
-	}
 	if condition == nil {
 		// if condition is nil, use true
 		condition = NewLiteral(true)
 	}
-	body = NewWhile(condition, body)
+	if increment == nil {
+		body = NewWhile(condition, body)
+	} else {
+		body = NewForDesugaredWhile(condition, body, increment)
+	}
 	if initializer != nil {
 		body = NewBlock([]Stmt{initializer, body})
 	}

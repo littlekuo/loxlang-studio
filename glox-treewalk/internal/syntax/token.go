@@ -49,6 +49,7 @@ const (
 	TOKEN_VAR
 	TOKEN_WHILE
 	TOKEN_BREAK
+	TOKEN_CONTINUE
 
 	TOKEN_EOF
 )
@@ -80,23 +81,24 @@ var (
 		TOKEN_STRING:     "string",
 		TOKEN_NUMBER:     "number",
 
-		TOKEN_AND:    "and",
-		TOKEN_CLASS:  "class",
-		TOKEN_ELSE:   "else",
-		TOKEN_FALSE:  "false",
-		TOKEN_FUN:    "fun",
-		TOKEN_FOR:    "for",
-		TOKEN_IF:     "if",
-		TOKEN_NIL:    "nil",
-		TOKEN_OR:     "or",
-		TOKEN_PRINT:  "print",
-		TOKEN_RETURN: "return",
-		TOKEN_SUPER:  "super",
-		TOKEN_THIS:   "this",
-		TOKEN_TRUE:   "true",
-		TOKEN_VAR:    "var",
-		TOKEN_WHILE:  "while",
-		TOKEN_BREAK:  "break",
+		TOKEN_AND:      "and",
+		TOKEN_CLASS:    "class",
+		TOKEN_ELSE:     "else",
+		TOKEN_FALSE:    "false",
+		TOKEN_FUN:      "fun",
+		TOKEN_FOR:      "for",
+		TOKEN_IF:       "if",
+		TOKEN_NIL:      "nil",
+		TOKEN_OR:       "or",
+		TOKEN_PRINT:    "print",
+		TOKEN_RETURN:   "return",
+		TOKEN_SUPER:    "super",
+		TOKEN_THIS:     "this",
+		TOKEN_TRUE:     "true",
+		TOKEN_VAR:      "var",
+		TOKEN_WHILE:    "while",
+		TOKEN_BREAK:    "break",
+		TOKEN_CONTINUE: "continue",
 
 		TOKEN_EOF: "EOF",
 	}

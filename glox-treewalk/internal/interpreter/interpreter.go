@@ -9,6 +9,7 @@ import (
 )
 
 var breakErr = fmt.Errorf("break")
+var continueErr = fmt.Errorf("continue")
 
 type Environment struct {
 	valueMap  map[string]interface{}
@@ -89,6 +90,37 @@ func (a *Interpreter) VisitBreakStmt(stmt *syntax.Break) error {
 	return breakErr
 }
 
+func (a *Interpreter) VisitContinueStmt(stmt *syntax.Continue) error {
+	return continueErr
+}
+
+func (a *Interpreter) VisitForDesugaredWhileStmt(stmt *syntax.ForDesugaredWhile) error {
+	for {
+		condResult := stmt.Condition.Accept(a)
+		if condResult.Err != nil {
+			return condResult.Err
+		}
+		if !isTruthy(condResult.Value) {
+			break
+		}
+		if err := a.execute(stmt.Body); err != nil {
+			if errors.Is(err, breakErr) {
+				return nil
+			} else if errors.Is(err, continueErr) {
+			} else {
+				return err
+			}
+		}
+		if stmt.Increment != nil {
+			result := a.executeExpr(stmt.Increment)
+			if result.Err != nil {
+				return result.Err
+			}
+		}
+	}
+	return nil
+}
+
 func (a *Interpreter) VisitWhileStmt(stmt *syntax.While) error {
 	for {
 		condResult := stmt.Condition.Accept(a)
@@ -101,6 +133,8 @@ func (a *Interpreter) VisitWhileStmt(stmt *syntax.While) error {
 		if err := a.execute(stmt.Body); err != nil {
 			if errors.Is(err, breakErr) {
 				return nil
+			} else if errors.Is(err, continueErr) {
+				continue
 			}
 			return err
 		}
@@ -177,6 +211,10 @@ func (a *Interpreter) VisitLogicalExpr(expr *syntax.Logical) syntax.Result {
 		}
 	}
 	return expr.Right.Accept(a)
+}
+
+func (a *Interpreter) executeExpr(expr syntax.Expr) syntax.Result {
+	return expr.Accept(a)
 }
 
 func (a *Interpreter) VisitAssignExpr(expr *syntax.Assign) syntax.Result {

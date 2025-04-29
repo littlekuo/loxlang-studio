@@ -62,6 +62,8 @@ func main() {
 		"If         : Expr condition, Stmt thenBranch, Stmt elseBranch",
 		"While      : Expr condition, Stmt body",
 		"Break      : Token keyword",
+		"ForDesugaredWhile: Expr condition, Stmt body, Expr increment",
+		"Continue   : Token keyword",
 	}, "error"); err != nil {
 		log.Fatal(err)
 	}

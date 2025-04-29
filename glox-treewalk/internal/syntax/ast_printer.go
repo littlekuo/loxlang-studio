@@ -35,6 +35,26 @@ func (a *AstPrinter) VisitBreakStmt(stmt *Break) error {
 	return nil
 }
 
+func (a *AstPrinter) VisitContinueStmt(stmt *Continue) error {
+	a.desc += indentString(a.ident, "continue")
+	return nil
+}
+
+func (a *AstPrinter) VisitForDesugaredWhileStmt(stmt *ForDesugaredWhile) error {
+	a.desc += indentString(a.ident, "(desugaredWhile ")
+	a.desc += a.PrintExpr(stmt.Condition)
+	a.desc += "\n"
+	a.ident += 2
+	if err := a.printStmt(stmt.Body); err != nil {
+		return err
+	}
+	a.desc += indentString(a.ident, a.PrintExpr(stmt.Increment))
+	a.desc += "\n"
+	a.ident -= 2
+	a.desc += indentString(a.ident, ")")
+	return nil
+}
+
 func (a *AstPrinter) VisitBlockStmt(stmt *Block) error {
 	a.desc += indentString(a.ident, "(block \n")
 	a.ident += 2
@@ -70,7 +90,7 @@ func (a *AstPrinter) VisitIfStmt(stmt *If) error {
 		return err
 	}
 	a.ident -= 2
-	a.desc += indentString(a.ident, "else")
+	a.desc += indentString(a.ident, "else\n")
 	a.ident += 2
 	if stmt.Elsebranch != nil {
 		if err := a.printStmt(stmt.Elsebranch); err != nil {
