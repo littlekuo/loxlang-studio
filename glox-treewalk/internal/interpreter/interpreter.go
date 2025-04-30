@@ -8,8 +8,10 @@ import (
 	"github.com/littlekuo/glox-treewalk/internal/syntax"
 )
 
-var breakErr = fmt.Errorf("break")
-var continueErr = fmt.Errorf("continue")
+var (
+	errBreak    = errors.New("break")
+	errContinue = errors.New("continue")
+)
 
 type Environment struct {
 	valueMap  map[string]interface{}
@@ -57,14 +59,21 @@ func (e *Environment) assign(name syntax.Token, value any) error {
 	return fmt.Errorf("undefined variable '%s'", name.Lexeme)
 }
 
+type Function interface {
+	Call(i *Interpreter, args []interface{}) syntax.Result
+	Arity() int
+}
+
 type Interpreter struct {
 	interpretErr error
 	env          *Environment
 }
 
 func NewInterpreter() *Interpreter {
+	globalEnv := NewEnvironment(nil)
+	globalEnv.define("clock", NewClock())
 	return &Interpreter{
-		env: &Environment{},
+		env: globalEnv,
 	}
 }
 
@@ -87,11 +96,11 @@ func (a *Interpreter) execute(stmt syntax.Stmt) error {
 }
 
 func (a *Interpreter) VisitBreakStmt(stmt *syntax.Break) error {
-	return breakErr
+	return errBreak
 }
 
 func (a *Interpreter) VisitContinueStmt(stmt *syntax.Continue) error {
-	return continueErr
+	return errContinue
 }
 
 func (a *Interpreter) VisitForDesugaredWhileStmt(stmt *syntax.ForDesugaredWhile) error {
@@ -104,9 +113,9 @@ func (a *Interpreter) VisitForDesugaredWhileStmt(stmt *syntax.ForDesugaredWhile)
 			break
 		}
 		if err := a.execute(stmt.Body); err != nil {
-			if errors.Is(err, breakErr) {
+			if errors.Is(err, errBreak) {
 				return nil
-			} else if errors.Is(err, continueErr) {
+			} else if errors.Is(err, errContinue) {
 			} else {
 				return err
 			}
@@ -131,9 +140,9 @@ func (a *Interpreter) VisitWhileStmt(stmt *syntax.While) error {
 			break
 		}
 		if err := a.execute(stmt.Body); err != nil {
-			if errors.Is(err, breakErr) {
+			if errors.Is(err, errBreak) {
 				return nil
-			} else if errors.Is(err, continueErr) {
+			} else if errors.Is(err, errContinue) {
 				continue
 			}
 			return err
@@ -322,6 +331,29 @@ func (a *Interpreter) VisitBinaryExpr(expr *syntax.Binary) syntax.Result {
 		return syntax.Result{Value: isEqual(left.Value, right.Value)}
 	}
 	return syntax.Result{Err: fmt.Errorf("unknown unary operator: %s", expr.Operator.Lexeme)}
+}
+
+func (a *Interpreter) VisitCallExpr(expr *syntax.Call) syntax.Result {
+	callee := expr.Callee.Accept(a)
+	if callee.Err != nil {
+		return syntax.Result{Err: callee.Err}
+	}
+	args := make([]any, len(expr.Arguments))
+	for i, arg := range expr.Arguments {
+		argVal := arg.Accept(a)
+		if argVal.Err != nil {
+			return syntax.Result{Err: argVal.Err}
+		}
+		args[i] = argVal.Value
+	}
+
+	if calleeVal, ok := callee.Value.(Function); ok {
+		if calleeVal.Arity() != len(args) {
+			return syntax.Result{Err: fmt.Errorf("wrong number of arguments: want=%d, got=%d", calleeVal.Arity(), len(args))}
+		}
+		return calleeVal.Call(a, args)
+	}
+	return syntax.Result{Err: fmt.Errorf("can only call functions and classes")}
 }
 
 func (a *Interpreter) VisitVariableExpr(expr *syntax.Variable) syntax.Result {

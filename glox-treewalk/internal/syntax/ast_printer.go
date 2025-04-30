@@ -41,7 +41,7 @@ func (a *AstPrinter) VisitContinueStmt(stmt *Continue) error {
 }
 
 func (a *AstPrinter) VisitForDesugaredWhileStmt(stmt *ForDesugaredWhile) error {
-	a.desc += indentString(a.ident, "(desugaredWhile ")
+	a.desc += indentString(a.ident, "(forDesugared ")
 	a.desc += a.PrintExpr(stmt.Condition)
 	a.desc += "\n"
 	a.ident += 2
@@ -159,6 +159,11 @@ func (a *AstPrinter) VisitUnaryExpr(expr *Unary) Result {
 
 func (a *AstPrinter) VisitVariableExpr(expr *Variable) Result {
 	return Result{Value: expr.Name.Lexeme}
+}
+
+func (a *AstPrinter) VisitCallExpr(expr *Call) Result {
+	exprs := append([]Expr{expr.Callee}, expr.Arguments...)
+	return Result{Value: a.parenthesize("call", exprs...)}
 }
 
 func (a *AstPrinter) parenthesize(operatorName string, exprs ...Expr) string {

@@ -51,6 +51,7 @@ func main() {
 		"Logical  : Expr left, Token operator, Expr right",
 		"Unary: Expr right, Token operator",
 		"Variable : Token name",
+		"Call     : Expr callee, Token paren, []Expr arguments",
 	}, "Result"); err != nil {
 		log.Fatal(err)
 	}
