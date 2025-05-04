@@ -1,9 +1,15 @@
 # go-lox
 
 
-## 1. GLox Treewalk Interpreter (Subproject)
+## 1. GLox TreeWalk Interpreter (Subproject)
 
-A tree-walking interpreter implementation for Lox language in Go
+A tree-walking interpreter implementation for Lox language in Go.
+
+In addition to basic features, it also supports
+1. Block comments               /*  */
+2. Continue statement           // Skip current loop iteration
+3. Break statement              // Early loop termination
+4. Anonymous functions          fun(x) { return x * 2; }
 
 ### 1.1 Installation & Build
 

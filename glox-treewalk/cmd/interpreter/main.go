@@ -58,9 +58,12 @@ func run(source string) error {
 	if err := parser.GetError(); err != nil {
 		return err
 	}
-	//astPrinter := syntax.AstPrinter{}
-	//fmt.Println(astPrinter.Print(expr))
 	interpret := interpreter.NewInterpreter()
+	resolver := interpreter.NewResolver(interpret)
+	resolver.Resolve(stmts)
+	if err := resolver.GetError(); err != nil {
+		return err
+	}
 	interpret.Interpret(stmts)
 	if err := interpret.GetError(); err != nil {
 		return err

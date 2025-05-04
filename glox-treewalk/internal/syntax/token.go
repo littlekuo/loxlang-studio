@@ -123,3 +123,7 @@ func (t Token) String() string {
 	return fmt.Sprintf("token: {type: %s lexeme:%s literal:%v, line: %d}",
 		TokenTypeStr[t.TokenType], t.Lexeme, t.Literal, t.Line)
 }
+
+func (t Token) IsEmpty() bool {
+	return t.TokenType == 0 && t.Lexeme == "" && t.Literal == nil
+}

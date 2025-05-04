@@ -13,53 +13,15 @@ var (
 	errContinue = errors.New("continue")
 )
 
-type Environment struct {
-	valueMap  map[string]interface{}
-	enclosing *Environment
+type ErrReturn struct {
+	Value interface{}
 }
 
-func NewEnvironment(e *Environment) *Environment {
-	// e is nil means top level
-	return &Environment{
-		valueMap:  make(map[string]interface{}),
-		enclosing: e,
-	}
+func (e *ErrReturn) Error() string {
+	return fmt.Sprintf("return %v", e.Value)
 }
 
-func (e *Environment) define(name string, val any) error {
-	if e.valueMap == nil {
-		e.valueMap = make(map[string]interface{})
-	}
-	if _, ok := e.valueMap[name]; ok {
-		return fmt.Errorf("re-declare variable %s", name)
-	}
-	e.valueMap[name] = val
-	return nil
-}
-
-func (e *Environment) get(name syntax.Token) (interface{}, error) {
-	val, ok := e.valueMap[name.Lexeme]
-	if ok {
-		return val, nil
-	}
-	if e.enclosing != nil {
-		return e.enclosing.get(name)
-	}
-	return nil, fmt.Errorf("undefined variable '%s'", name.Lexeme)
-}
-
-func (e *Environment) assign(name syntax.Token, value any) error {
-	if _, ok := e.valueMap[name.Lexeme]; ok {
-		e.valueMap[name.Lexeme] = value
-		return nil
-	}
-	if e.enclosing != nil {
-		return e.enclosing.assign(name, value)
-	}
-	return fmt.Errorf("undefined variable '%s'", name.Lexeme)
-}
-
-type Function interface {
+type Callable interface {
 	Call(i *Interpreter, args []interface{}) syntax.Result
 	Arity() int
 }
@@ -67,13 +29,17 @@ type Function interface {
 type Interpreter struct {
 	interpretErr error
 	env          *Environment
+	locals       map[syntax.Expr]int
+	globals      *Environment
 }
 
 func NewInterpreter() *Interpreter {
-	globalEnv := NewEnvironment(nil)
-	globalEnv.define("clock", NewClock())
+	globals := NewEnvironment(nil)
+	_ = globals.define("clock", NewClock())
 	return &Interpreter{
-		env: globalEnv,
+		env:     globals,
+		locals:  make(map[syntax.Expr]int),
+		globals: globals,
 	}
 }
 
@@ -93,6 +59,26 @@ func (a *Interpreter) Interpret(stmts []syntax.Stmt) {
 
 func (a *Interpreter) execute(stmt syntax.Stmt) error {
 	return stmt.Accept(a)
+}
+
+func (a *Interpreter) resolve(expr syntax.Expr, depth int) {
+	a.locals[expr] = depth
+}
+
+func (a *Interpreter) VisitReturnStmt(stmt *syntax.Return) error {
+	if stmt.Value != nil {
+		result := stmt.Value.Accept(a)
+		if result.Err != nil {
+			return result.Err
+		}
+		return &ErrReturn{Value: result.Value}
+	}
+	return nil
+}
+
+func (a *Interpreter) VisitFunctionStmt(stmt *syntax.Function) error {
+	fn := NewLoxFunction(stmt, a.env)
+	return a.env.define(stmt.Name.Lexeme, fn)
 }
 
 func (a *Interpreter) VisitBreakStmt(stmt *syntax.Break) error {
@@ -231,8 +217,17 @@ func (a *Interpreter) VisitAssignExpr(expr *syntax.Assign) syntax.Result {
 	if result.Err != nil {
 		return syntax.Result{Err: result.Err}
 	}
-	if err := a.env.assign(expr.Name, result.Value); err != nil {
-		return syntax.Result{Err: err}
+	distance, ok := a.locals[expr]
+	if ok {
+		err := a.env.assignAt(distance, expr.Name, result.Value)
+		if err != nil {
+			return syntax.Result{Err: err}
+		}
+	} else {
+		err := a.globals.assign(expr.Name, result.Value)
+		if err != nil {
+			return syntax.Result{Err: err}
+		}
 	}
 	return result
 }
@@ -347,7 +342,7 @@ func (a *Interpreter) VisitCallExpr(expr *syntax.Call) syntax.Result {
 		args[i] = argVal.Value
 	}
 
-	if calleeVal, ok := callee.Value.(Function); ok {
+	if calleeVal, ok := callee.Value.(Callable); ok {
 		if calleeVal.Arity() != len(args) {
 			return syntax.Result{Err: fmt.Errorf("wrong number of arguments: want=%d, got=%d", calleeVal.Arity(), len(args))}
 		}
@@ -356,12 +351,28 @@ func (a *Interpreter) VisitCallExpr(expr *syntax.Call) syntax.Result {
 	return syntax.Result{Err: fmt.Errorf("can only call functions and classes")}
 }
 
+func (a *Interpreter) VisitAnonymousFunctionExpr(expr *syntax.AnonymousFunction) syntax.Result {
+	loxFunc := NewLoxFunction(expr.Decl, a.env)
+	return syntax.Result{Value: loxFunc}
+}
+
 func (a *Interpreter) VisitVariableExpr(expr *syntax.Variable) syntax.Result {
-	val, err := a.env.get(expr.Name)
+	return a.lookupVariable(expr.Name, expr)
+}
+
+func (a *Interpreter) lookupVariable(name syntax.Token, expr syntax.Expr) syntax.Result {
+	distance, ok := a.locals[expr]
+	var obj any
+	var err error
+	if ok {
+		obj, err = a.env.getAt(distance, name)
+	} else {
+		obj, err = a.globals.get(name)
+	}
 	if err != nil {
 		return syntax.Result{Err: err}
 	}
-	return syntax.Result{Value: val}
+	return syntax.Result{Value: obj}
 }
 
 func isTruthy(value interface{}) bool {

@@ -16,25 +16,30 @@ Unary: 	     ! -	       Right
 
 
 
-expression ->  assignment
-assignment ->  IDENTIFIER "=" assignment
-                | logical_or
+expression     ->  assignment
+assignment     ->  IDENTIFIER "=" assignment
+                   | logical_or
 
-logical_or  ->  logical_and ( "or" logical_and )*
-logical_and ->  equality ( "and" equality )*
-equality   ->  comparison ( ( "!=" | "==" ) comparison )*
-comparison ->  term ( ( ">" | ">=" | "<" | "<=" ) term )*
-term       ->  factor ( ( "-" | "+" ) factor )*
-factor     ->  unary ( ( "/" | "*" ) unary )*
-unary      ->  ( "!" | "-" ) unary | call
-call       ->  primary ( "(" arguments? ")" )*
-primary    ->  NUMBER | STRING | "false" | "true" | "nil" | "(" expr ")" | IDENTIFIER
-arguments      → expression ( "," expression )* ;
+logical_or     ->  logical_and ( "or" logical_and )*
+logical_and    ->  equality ( "and" equality )*
+equality       ->  comparison ( ( "!=" | "==" ) comparison )*
+comparison     ->  term ( ( ">" | ">=" | "<" | "<=" ) term )*
+term           ->  factor ( ( "-" | "+" ) factor )*
+factor         ->  unary ( ( "/" | "*" ) unary )*
+unary          ->  ( "!" | "-" ) unary | call
+call           ->  primary ( "(" arguments? ")" )*
+primary        ->  NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" | IDENTIFIER ｜ anonymous_func
+anonymous_func ->  "fun" "(" parameters? ")" block
+arguments      ->  expression ( "," expression )* ;
 
 program        → declaration* EOF
 
-declaration    → varDecl
+declaration    → funDecl
+               | varDecl
                | statement
+
+funDecl        → "fun" IDENTIFIER "(" parameters? ")" block
+parameters     → IDENTIFIER ( "," IDENTIFIER )*
 
 varDecl        → "var" IDENTIFIER ( "=" expression )? ";"
 
@@ -47,16 +52,18 @@ statement      → exprStmt
 			   | forStmt
 			   | breakStmt
 			   | continueStmt
+               | returnStmt
 
 exprStmt       →  expression ";" ;
-printStmt      → "print" expression ";" ;
-block         → "{" declaration* "}" ;
-ifStmt         → "if" "(" expression ")" statement ( "else" statement )? ;
+printStmt      → "print" expression ";"
+block          → "{" declaration* "}"
+ifStmt         → "if" "(" expression ")" statement ( "else" statement )?
 whileStmt      → "while" "(" expression ")" statement
 forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
 				  expression? ";" expression? ")" statement
 breakStmt      → "break" ";"
 continueStmt   → "continue" ";"
+returnStmt     → "return" expression? ";"
 */
 
 type Parser struct {
@@ -90,10 +97,52 @@ func (p *Parser) Parse() []Stmt {
 }
 
 func (p *Parser) parseDeclaration() (Stmt, error) {
+	if p.match(TOKEN_FUN) {
+		return p.parseFunction(false, "function")
+	}
 	if p.match(TOKEN_VAR) {
 		return p.parseVarDecl()
 	}
 	return p.parseStmt()
+}
+
+func (p *Parser) parseFunction(anonymous bool, kind string) (*Function, error) {
+	var name Token
+	if !anonymous {
+		if err := p.consume(TOKEN_IDENTIFIER, "expect "+kind+" name."); err != nil {
+			return nil, err
+		}
+		name = p.previous()
+	}
+	if cErr := p.consume(TOKEN_LEFT_PAREN, "expect '(' after "+kind+" name"); cErr != nil {
+		return nil, cErr
+	}
+	params := make([]Token, 0)
+	if !p.check(TOKEN_RIGHT_PAREN) {
+		for {
+			if len(params) >= 255 {
+				return nil, p.error(p.peek(), "can't have more than 255 parameters")
+			}
+			if pErr := p.consume(TOKEN_IDENTIFIER, "expect parameter name"); pErr != nil {
+				return nil, pErr
+			}
+			params = append(params, p.previous())
+			if !p.match(TOKEN_COMMA) {
+				break
+			}
+		}
+	}
+	if cErr := p.consume(TOKEN_RIGHT_PAREN, "expect ')' after parameters"); cErr != nil {
+		return nil, cErr
+	}
+	if cErr := p.consume(TOKEN_LEFT_BRACE, "expect '{' before "+kind+" body"); cErr != nil {
+		return nil, cErr
+	}
+	body, err := p.parseBlocks()
+	if err != nil {
+		return nil, err
+	}
+	return NewFunction(name, params, body), nil
 }
 
 func (p *Parser) parseVarDecl() (Stmt, error) {
@@ -135,10 +184,33 @@ func (p *Parser) parseStmt() (Stmt, error) {
 	if p.match(TOKEN_CONTINUE) {
 		return p.parseContinueStmt()
 	}
+	if p.match(TOKEN_RETURN) {
+		return p.parseReturnStmt()
+	}
 	if p.match(TOKEN_LEFT_BRACE) {
-		return p.parseBlockStmt()
+		blocks, bErr := p.parseBlocks()
+		if bErr != nil {
+			return nil, bErr
+		}
+		return NewBlock(blocks), nil
 	}
 	return p.parseExprStmt()
+}
+
+func (p *Parser) parseReturnStmt() (Stmt, error) {
+	keyword := p.previous()
+	var value Expr
+	if !p.check(TOKEN_SEMICOLON) {
+		var err error
+		value, err = p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+	}
+	if cErr := p.consume(TOKEN_SEMICOLON, "expect ';' after return value"); cErr != nil {
+		return nil, cErr
+	}
+	return NewReturn(keyword, value), nil
 }
 
 func (p *Parser) parseBreakStmt() (Stmt, error) {
@@ -171,7 +243,6 @@ func (p *Parser) parseForStmt() (Stmt, error) {
 	}
 	var initializer Stmt
 	if p.match(TOKEN_SEMICOLON) {
-
 	} else if p.match(TOKEN_VAR) {
 		initializer, err = p.parseVarDecl()
 		if err != nil {
@@ -268,7 +339,7 @@ func (p *Parser) parseIfStmt() (Stmt, error) {
 	return NewIf(condition, thenBranch, elseBranch), nil
 }
 
-func (p *Parser) parseBlockStmt() (Stmt, error) {
+func (p *Parser) parseBlocks() ([]Stmt, error) {
 	stmts := make([]Stmt, 0)
 	for !p.check(TOKEN_RIGHT_BRACE) && !p.isEnd() {
 		stmt, err := p.parseDeclaration()
@@ -280,7 +351,7 @@ func (p *Parser) parseBlockStmt() (Stmt, error) {
 	if cErr := p.consume(TOKEN_RIGHT_BRACE, "expect '}' after block"); cErr != nil {
 		return nil, cErr
 	}
-	return NewBlock(stmts), nil
+	return stmts, nil
 }
 
 func (p *Parser) parsePrintStmt() (Stmt, error) {
@@ -310,9 +381,9 @@ func (p *Parser) parseExpr() (Expr, error) {
 }
 
 func (p *Parser) parseAssignment() (Expr, error) {
-	expr, pErr := p.parseLogicalOr()
-	if pErr != nil {
-		return nil, pErr
+	expr, err := p.parseLogicalOr()
+	if err != nil {
+		return nil, err
 	}
 
 	if p.match(TOKEN_EQUAL) {
@@ -495,6 +566,14 @@ func (p *Parser) finishCall(callee Expr) (Expr, error) {
 	return NewCall(callee, p.previous(), args), nil
 }
 
+func (p *Parser) parseAnonymousFunction() (Expr, error) {
+	decl, err := p.parseFunction(true, "function")
+	if err != nil {
+		return nil, err
+	}
+	return NewAnonymousFunction(decl), nil
+}
+
 func (p *Parser) parsePrimary() (Expr, error) {
 	if p.match(TOKEN_NUMBER) {
 		return &Literal{Value: p.previous().Literal}, nil
@@ -513,6 +592,9 @@ func (p *Parser) parsePrimary() (Expr, error) {
 	}
 	if p.match(TOKEN_IDENTIFIER) {
 		return NewVariable(p.previous()), nil
+	}
+	if p.match(TOKEN_FUN) {
+		return p.parseAnonymousFunction()
 	}
 	if p.match(TOKEN_LEFT_PAREN) {
 		expr, err := p.parseExpr()

@@ -40,6 +40,35 @@ func (a *AstPrinter) VisitContinueStmt(stmt *Continue) error {
 	return nil
 }
 
+func (a *AstPrinter) VisitReturnStmt(stmt *Return) error {
+	a.desc += indentString(a.ident, "(return ")
+	if stmt.Value != nil {
+		a.desc += a.PrintExpr(stmt.Value)
+	}
+	a.desc += ")"
+	return nil
+}
+
+func (a *AstPrinter) VisitFunctionStmt(stmt *Function) error {
+	a.desc += indentString(a.ident, "(fun "+stmt.Name.Lexeme+"(")
+	a.ident += 2
+	for idx, param := range stmt.Params {
+		if idx != 0 {
+			a.desc += " "
+		}
+		a.desc += param.Lexeme
+	}
+	a.desc += ")\n"
+	for _, st := range stmt.Body {
+		if err := a.printStmt(st); err != nil {
+			return err
+		}
+	}
+	a.ident -= 2
+	a.desc += indentString(a.ident, ")")
+	return nil
+}
+
 func (a *AstPrinter) VisitForDesugaredWhileStmt(stmt *ForDesugaredWhile) error {
 	a.desc += indentString(a.ident, "(forDesugared ")
 	a.desc += a.PrintExpr(stmt.Condition)
@@ -162,8 +191,16 @@ func (a *AstPrinter) VisitVariableExpr(expr *Variable) Result {
 }
 
 func (a *AstPrinter) VisitCallExpr(expr *Call) Result {
-	exprs := append([]Expr{expr.Callee}, expr.Arguments...)
-	return Result{Value: a.parenthesize("call", exprs...)}
+	params := append([]Expr{expr.Callee}, expr.Arguments...)
+	return Result{Value: a.parenthesize("call", params...)}
+}
+
+func (a *AstPrinter) VisitAnonymousFunctionExpr(expr *AnonymousFunction) Result {
+	err := a.VisitFunctionStmt(expr.Decl)
+	if err != nil {
+		return Result{Err: err}
+	}
+	return Result{Value: ""}
 }
 
 func (a *AstPrinter) parenthesize(operatorName string, exprs ...Expr) string {

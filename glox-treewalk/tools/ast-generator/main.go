@@ -12,7 +12,7 @@ import (
 	"golang.org/x/text/language"
 )
 
-var initedTypes = map[string]struct{}{}
+var generatedTypes = map[string]struct{}{}
 
 func generatedStructDef(writer io.Writer, structName string) error {
 	if structName == "" ||
@@ -21,7 +21,7 @@ func generatedStructDef(writer io.Writer, structName string) error {
 		// builtin type
 		return nil
 	}
-	if _, ok := initedTypes[structName]; ok {
+	if _, ok := generatedTypes[structName]; ok {
 		return nil
 	}
 	if structName == "Result" {
@@ -31,7 +31,7 @@ func generatedStructDef(writer io.Writer, structName string) error {
 		}
 		writer.Write([]byte("\n"))
 	}
-	initedTypes[structName] = struct{}{}
+	generatedTypes[structName] = struct{}{}
 	return nil
 }
 
@@ -44,14 +44,15 @@ func main() {
 	outputDir := os.Args[1]
 	if err := defineAst(outputDir, "Expr", []string{
 		"Assign   : Token name, Expr value",
-		"Binary: Expr left, Token operator, Expr right",
-		"Grouping: Expr expression",
-		"Literal: any value",
 		// logical are shortcuts, different from binary
 		"Logical  : Expr left, Token operator, Expr right",
+		"Binary: Expr left, Token operator, Expr right",
 		"Unary: Expr right, Token operator",
-		"Variable : Token name",
 		"Call     : Expr callee, Token paren, []Expr arguments",
+		"Grouping: Expr expression",
+		"Literal: any value",
+		"Variable : Token name",
+		"AnonymousFunction   : *Function decl",
 	}, "Result"); err != nil {
 		log.Fatal(err)
 	}
@@ -60,8 +61,10 @@ func main() {
 		"Expression : Expr expression",
 		"Print      : Expr expression",
 		"Var        : Token name, Expr initializer",
+		"Function   : Token name, []Token params, []Stmt body",
 		"If         : Expr condition, Stmt thenBranch, Stmt elseBranch",
 		"While      : Expr condition, Stmt body",
+		"Return     : Token keyword, Expr value",
 		"Break      : Token keyword",
 		"ForDesugaredWhile: Expr condition, Stmt body, Expr increment",
 		"Continue   : Token keyword",

@@ -6,8 +6,10 @@ type StmtVisitor interface {
 	VisitExpressionStmt(*Expression) error
 	VisitPrintStmt(*Print) error
 	VisitVarStmt(*Var) error
+	VisitFunctionStmt(*Function) error
 	VisitIfStmt(*If) error
 	VisitWhileStmt(*While) error
+	VisitReturnStmt(*Return) error
 	VisitBreakStmt(*Break) error
 	VisitForDesugaredWhileStmt(*ForDesugaredWhile) error
 	VisitContinueStmt(*Continue) error
@@ -67,6 +69,22 @@ func (n *Var) Accept(v StmtVisitor) error {
 	return v.VisitVarStmt(n)
 }
 
+type Function struct {
+	Name Token
+	Params []Token
+	Body []Stmt
+}
+func NewFunction(name Token, params []Token, body []Stmt) *Function {
+	return &Function{
+		Name: name,
+		Params: params,
+		Body: body,
+	}
+}
+func (n *Function) Accept(v StmtVisitor) error {
+	return v.VisitFunctionStmt(n)
+}
+
 type If struct {
 	Condition Expr
 	Thenbranch Stmt
@@ -95,6 +113,20 @@ func NewWhile(condition Expr, body Stmt) *While {
 }
 func (n *While) Accept(v StmtVisitor) error {
 	return v.VisitWhileStmt(n)
+}
+
+type Return struct {
+	Keyword Token
+	Value Expr
+}
+func NewReturn(keyword Token, value Expr) *Return {
+	return &Return{
+		Keyword: keyword,
+		Value: value,
+	}
+}
+func (n *Return) Accept(v StmtVisitor) error {
+	return v.VisitReturnStmt(n)
 }
 
 type Break struct {
