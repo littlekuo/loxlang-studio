@@ -109,19 +109,20 @@ type Token struct {
 	Lexeme    string
 	Literal   any
 	Line      int
+	Pos       int // position in source file
 }
 
-func NewToken(tokenType TokenType, lexeme string, literal any, line int) Token {
-	return Token{tokenType, lexeme, literal, line}
+func NewToken(tokenType TokenType, lexeme string, literal any, line int, pos int) Token {
+	return Token{tokenType, lexeme, literal, line, pos}
 }
 
 func (t Token) String() string {
 	if t.Lexeme == "" {
-		return fmt.Sprintf("token: {type: %s literal:%v, line: %d}",
-			TokenTypeStr[t.TokenType], t.Literal, t.Line)
+		return fmt.Sprintf("token: {type: %s literal:%v, line: %d, pos: %d}",
+			TokenTypeStr[t.TokenType], t.Literal, t.Line, t.Pos)
 	}
-	return fmt.Sprintf("token: {type: %s lexeme:%s literal:%v, line: %d}",
-		TokenTypeStr[t.TokenType], t.Lexeme, t.Literal, t.Line)
+	return fmt.Sprintf("token: {type: %s lexeme:%s literal:%v, line: %d, pos: %d}",
+		TokenTypeStr[t.TokenType], t.Lexeme, t.Literal, t.Line, t.Pos)
 }
 
 func (t Token) IsEmpty() bool {

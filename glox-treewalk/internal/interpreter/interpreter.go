@@ -26,21 +26,44 @@ type Callable interface {
 	Arity() int
 }
 
+type Loc struct {
+	depth int
+	idx   int
+}
+
 type Interpreter struct {
 	interpretErr error
 	env          *Environment
-	locals       map[syntax.Expr]int
+	localAccess  map[syntax.Expr]*Loc // track local variable access
+	localDefs    map[syntax.Token]int // track local variable definition
 	globals      *Environment
 }
 
 func NewInterpreter() *Interpreter {
 	globals := NewEnvironment(nil)
-	_ = globals.define("clock", NewClock())
+	_ = globals.defineGlobal("clock", NewClock())
 	return &Interpreter{
-		env:     globals,
-		locals:  make(map[syntax.Expr]int),
-		globals: globals,
+		localAccess: make(map[syntax.Expr]*Loc),
+		localDefs:   make(map[syntax.Token]int),
+		env:         globals,
+		globals:     globals,
 	}
+}
+
+func (a *Interpreter) define(name syntax.Token, value any) error {
+	if idx, ok := a.localDefs[name]; ok {
+		return a.env.defineLocal(idx, value)
+	} else {
+		return a.globals.defineGlobal(name.Lexeme, value)
+	}
+}
+
+func (a *Interpreter) assign(expr *syntax.Assign, value interface{}) error {
+	loc, ok := a.localAccess[expr]
+	if ok {
+		return a.env.assignAt(loc.depth, loc.idx, value)
+	}
+	return a.globals.assignGlobal(expr.Name, value)
 }
 
 func (a *Interpreter) GetError() error {
@@ -61,8 +84,12 @@ func (a *Interpreter) execute(stmt syntax.Stmt) error {
 	return stmt.Accept(a)
 }
 
-func (a *Interpreter) resolve(expr syntax.Expr, depth int) {
-	a.locals[expr] = depth
+func (a *Interpreter) resolve(expr syntax.Expr, depth int, idx int) {
+	a.localAccess[expr] = &Loc{depth: depth, idx: idx}
+}
+
+func (a *Interpreter) recordLocalDefs(name syntax.Token, idx int) {
+	a.localDefs[name] = idx
 }
 
 func (a *Interpreter) VisitReturnStmt(stmt *syntax.Return) error {
@@ -78,7 +105,7 @@ func (a *Interpreter) VisitReturnStmt(stmt *syntax.Return) error {
 
 func (a *Interpreter) VisitFunctionStmt(stmt *syntax.Function) error {
 	fn := NewLoxFunction(stmt, a.env)
-	return a.env.define(stmt.Name.Lexeme, fn)
+	return a.define(stmt.Name, fn)
 }
 
 func (a *Interpreter) VisitBreakStmt(stmt *syntax.Break) error {
@@ -159,7 +186,7 @@ func (a *Interpreter) VisitVarStmt(stmt *syntax.Var) error {
 		}
 		value = result.Value
 	}
-	return a.env.define(stmt.Name.Lexeme, value)
+	return a.define(stmt.Name, value)
 }
 
 func (a *Interpreter) VisitBlockStmt(stmt *syntax.Block) error {
@@ -217,17 +244,9 @@ func (a *Interpreter) VisitAssignExpr(expr *syntax.Assign) syntax.Result {
 	if result.Err != nil {
 		return syntax.Result{Err: result.Err}
 	}
-	distance, ok := a.locals[expr]
-	if ok {
-		err := a.env.assignAt(distance, expr.Name, result.Value)
-		if err != nil {
-			return syntax.Result{Err: err}
-		}
-	} else {
-		err := a.globals.assign(expr.Name, result.Value)
-		if err != nil {
-			return syntax.Result{Err: err}
-		}
+	err := a.assign(expr, result.Value)
+	if err != nil {
+		return syntax.Result{Err: err}
 	}
 	return result
 }
@@ -361,13 +380,13 @@ func (a *Interpreter) VisitVariableExpr(expr *syntax.Variable) syntax.Result {
 }
 
 func (a *Interpreter) lookupVariable(name syntax.Token, expr syntax.Expr) syntax.Result {
-	distance, ok := a.locals[expr]
+	loc, ok := a.localAccess[expr]
 	var obj any
 	var err error
 	if ok {
-		obj, err = a.env.getAt(distance, name)
+		obj, err = a.env.getAt(loc.depth, loc.idx)
 	} else {
-		obj, err = a.globals.get(name)
+		obj, err = a.globals.getGlobal(name)
 	}
 	if err != nil {
 		return syntax.Result{Err: err}

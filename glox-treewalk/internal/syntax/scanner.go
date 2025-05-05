@@ -56,7 +56,7 @@ func (s *Scanner) ScanTokens() []Token {
 	}
 
 	// the last token
-	s.tokens = append(s.tokens, NewToken(TOKEN_EOF, "", nil, s.line))
+	s.tokens = append(s.tokens, NewToken(TOKEN_EOF, "", nil, s.line, s.start))
 	return s.tokens
 }
 
@@ -125,7 +125,7 @@ func (s *Scanner) addSimpleToken(tk TokenType) {
 
 func (s *Scanner) addTokenWithLiteral(tk TokenType, literal any) {
 	text := s.source[s.start:s.current]
-	s.tokens = append(s.tokens, NewToken(tk, text, literal, s.line))
+	s.tokens = append(s.tokens, NewToken(tk, text, literal, s.line, s.start))
 }
 
 func (s *Scanner) isEnd() bool {

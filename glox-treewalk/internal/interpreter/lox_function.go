@@ -2,6 +2,7 @@ package interpreter
 
 import (
 	"errors"
+
 	"github.com/littlekuo/glox-treewalk/internal/syntax"
 )
 
@@ -24,7 +25,7 @@ func (l *LoxFunction) Call(i *Interpreter, args []any) syntax.Result {
 		i.env = previousEnv
 	}()
 	for idx, param := range l.declaration.Params {
-		if err := i.env.define(param.Lexeme, args[idx]); err != nil {
+		if err := i.define(param, args[idx]); err != nil {
 			return syntax.Result{Err: err}
 		}
 	}

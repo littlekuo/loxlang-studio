@@ -2,61 +2,89 @@ package interpreter
 
 import (
 	"fmt"
+
 	"github.com/littlekuo/glox-treewalk/internal/syntax"
 )
 
 type Environment struct {
-	valueMap  map[string]interface{}
+	values    []interface{}          // valid for local scope
+	valueMap  map[string]interface{} // valid for global scope
 	enclosing *Environment
 }
 
 func NewEnvironment(e *Environment) *Environment {
-	// e is nil means top level
+	if e == nil {
+		// e is nil means top level
+		return &Environment{
+			valueMap: make(map[string]interface{}),
+		}
+	}
 	return &Environment{
-		valueMap:  make(map[string]interface{}),
+		values:    make([]interface{}, 0),
 		enclosing: e,
 	}
 }
 
-func (e *Environment) define(name string, val any) error {
+// define in global scope
+func (e *Environment) defineGlobal(name string, val any) error {
 	if e.valueMap == nil {
-		e.valueMap = make(map[string]interface{})
+		panic("valueMap is nil")
 	}
 	if _, ok := e.valueMap[name]; ok {
-		return fmt.Errorf("re-declare variable %s", name)
+		return fmt.Errorf("re-define variable %s", name)
 	}
 	e.valueMap[name] = val
 	return nil
 }
 
-func (e *Environment) get(name syntax.Token) (interface{}, error) {
+// get in global scope
+func (e *Environment) getGlobal(name syntax.Token) (interface{}, error) {
 	val, ok := e.valueMap[name.Lexeme]
 	if ok {
 		return val, nil
 	}
-	if e.enclosing != nil {
-		return e.enclosing.get(name)
-	}
 	return nil, fmt.Errorf("undefined variable '%s'", name.Lexeme)
 }
 
-func (e *Environment) assign(name syntax.Token, value any) error {
+// assign in global scope
+func (e *Environment) assignGlobal(name syntax.Token, value any) error {
 	if _, ok := e.valueMap[name.Lexeme]; ok {
 		e.valueMap[name.Lexeme] = value
 		return nil
 	}
-	if e.enclosing != nil {
-		return e.enclosing.assign(name, value)
-	}
 	return fmt.Errorf("undefined variable '%s'", name.Lexeme)
 }
 
-func (e *Environment) assignAt(distance int, name syntax.Token, value any) error {
-	return e.ancestor(distance).assign(name, value)
+// define in local scope
+func (e *Environment) defineLocal(idx int, value any) error {
+	if idx >= len(e.values) {
+		e.values = append(e.values, make([]interface{}, idx+1-len(e.values))...)
+	}
+	e.values[idx] = value
+	return nil
 }
 
-func (e *Environment) getAt(distance int, name syntax.Token) (interface{}, error) {
-	return e.ancestor(distance).get(name)
+func (e *Environment) getLocal(idx int) (interface{}, error) {
+	if idx >= len(e.values) {
+		return nil, fmt.Errorf("undefined idx %d", idx)
+	}
+	return e.values[idx], nil
+}
+
+func (e *Environment) assignLocal(idx int, value any) error {
+	if idx >= len(e.values) {
+		return fmt.Errorf("undefined idx %d", idx)
+	}
+	e.values[idx] = value
+	return nil
+}
+
+func (e *Environment) assignAt(distance int, idx int, value any) error {
+	return e.ancestor(distance).assignLocal(idx, value)
+}
+
+func (e *Environment) getAt(distance int, idx int) (interface{}, error) {
+	return e.ancestor(distance).getLocal(idx)
 }
 
 func (e *Environment) ancestor(distance int) *Environment {
