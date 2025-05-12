@@ -17,7 +17,7 @@ Unary: 	     ! -	       Right
 
 
 expression     ->  assignment
-assignment     ->  IDENTIFIER "=" assignment
+assignment     ->  (call "." )? IDENTIFIER "=" assignment
                    | logical_or
 
 logical_or     ->  logical_and ( "or" logical_and )*
@@ -27,43 +27,47 @@ comparison     ->  term ( ( ">" | ">=" | "<" | "<=" ) term )*
 term           ->  factor ( ( "-" | "+" ) factor )*
 factor         ->  unary ( ( "/" | "*" ) unary )*
 unary          ->  ( "!" | "-" ) unary | call
-call           ->  primary ( "(" arguments? ")" )*
+call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
 primary        ->  NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" | IDENTIFIER ｜ anonymous_func
 anonymous_func ->  "fun" "(" parameters? ")" block
 arguments      ->  expression ( "," expression )* ;
 
-program        → declaration* EOF
+program        -> declaration* EOF
 
-declaration    → funDecl
-               | varDecl
-               | statement
-
-funDecl        → "fun" IDENTIFIER "(" parameters? ")" block
-parameters     → IDENTIFIER ( "," IDENTIFIER )*
-
-varDecl        → "var" IDENTIFIER ( "=" expression )? ";"
+declaration    -> classDecl
+                | funDecl
+                | varDecl
+                | statement
 
 
-statement      → exprStmt
-               | printStmt
-			   | block
-			   | ifStmt
-			   | whileStmt
-			   | forStmt
-			   | breakStmt
-			   | continueStmt
-               | returnStmt
+classDecl      -> "class" IDENTIFIER "{" function* "}" ;
+funDecl        -> "fun" function
+function       -> IDENTIFIER "(" parameters? ")" block
+parameters     -> IDENTIFIER ( "," IDENTIFIER )*
 
-exprStmt       →  expression ";" ;
-printStmt      → "print" expression ";"
-block          → "{" declaration* "}"
-ifStmt         → "if" "(" expression ")" statement ( "else" statement )?
-whileStmt      → "while" "(" expression ")" statement
-forStmt        → "for" "(" ( varDecl | exprStmt | ";" )
+varDecl        -> "var" IDENTIFIER ( "=" expression )? ";"
+
+
+statement      -> exprStmt
+                | printStmt
+			    | block
+			    | ifStmt
+			    | whileStmt
+			    | forStmt
+			    | breakStmt
+			    | continueStmt
+                | returnStmt
+
+exprStmt       ->  expression ";" ;
+printStmt      -> "print" expression ";"
+block          -> "{" declaration* "}"
+ifStmt         -> "if" "(" expression ")" statement ( "else" statement )?
+whileStmt      -> "while" "(" expression ")" statement
+forStmt        -> "for" "(" ( varDecl | exprStmt | ";" )
 				  expression? ";" expression? ")" statement
-breakStmt      → "break" ";"
-continueStmt   → "continue" ";"
-returnStmt     → "return" expression? ";"
+breakStmt      -> "break" ";"
+continueStmt   -> "continue" ";"
+returnStmt     -> "return" expression? ";"
 */
 
 type Parser struct {
@@ -97,6 +101,9 @@ func (p *Parser) Parse() []Stmt {
 }
 
 func (p *Parser) parseDeclaration() (Stmt, error) {
+	if p.match(TOKEN_CLASS) {
+		return p.parseClassDecl()
+	}
 	if p.match(TOKEN_FUN) {
 		return p.parseFunction(false, "function")
 	}
@@ -104,6 +111,28 @@ func (p *Parser) parseDeclaration() (Stmt, error) {
 		return p.parseVarDecl()
 	}
 	return p.parseStmt()
+}
+
+func (p *Parser) parseClassDecl() (*Class, error) {
+	if cErr := p.consume(TOKEN_IDENTIFIER, "expect class name"); cErr != nil {
+		return nil, cErr
+	}
+	name := p.previous()
+	if p.match(TOKEN_LEFT_BRACE) {
+		methods := make([]*Function, 0)
+		for !p.check(TOKEN_RIGHT_BRACE) && !p.isEnd() {
+			method, err := p.parseFunction(false, "method")
+			if err != nil {
+				return nil, err
+			}
+			methods = append(methods, method)
+		}
+		if cErr := p.consume(TOKEN_RIGHT_BRACE, "expect '}' after class body"); cErr != nil {
+			return nil, cErr
+		}
+		return NewClass(name, methods), nil
+	}
+	return nil, p.error(p.peek(), "expect '{' after class name")
 }
 
 func (p *Parser) parseFunction(anonymous bool, kind string) (*Function, error) {
@@ -395,6 +424,8 @@ func (p *Parser) parseAssignment() (Expr, error) {
 
 		if variable, ok := expr.(*Variable); ok {
 			return NewAssign(variable.Name, value), nil
+		} else if variable, ok := expr.(*Get); ok {
+			return NewSet(variable.Object, variable.Name, value), nil
 		}
 
 		return nil, p.error(equalToken, "Invalid assignment target.")
@@ -535,6 +566,12 @@ func (p *Parser) parseCall() (Expr, error) {
 			if err != nil {
 				return nil, err
 			}
+		} else if p.match(TOKEN_DOT) {
+			err := p.consume(TOKEN_IDENTIFIER, "expect property name after '.'")
+			if err != nil {
+				return nil, err
+			}
+			expr = NewGet(expr, p.previous())
 		} else {
 			break
 		}

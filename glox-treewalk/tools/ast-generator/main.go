@@ -49,6 +49,8 @@ func main() {
 		"Binary: Expr left, Token operator, Expr right",
 		"Unary: Expr right, Token operator",
 		"Call     : Expr callee, Token paren, []Expr arguments",
+		"Get      : Expr object, Token name",
+		"Set      : Expr object, Token name, Expr value",
 		"Grouping: Expr expression",
 		"Literal: any value",
 		"Variable : Token name",
@@ -68,6 +70,7 @@ func main() {
 		"Break      : Token keyword",
 		"ForDesugaredWhile: Expr condition, Stmt body, Expr increment",
 		"Continue   : Token keyword",
+		"Class      : Token name, []*Function methods",
 	}, "error"); err != nil {
 		log.Fatal(err)
 	}

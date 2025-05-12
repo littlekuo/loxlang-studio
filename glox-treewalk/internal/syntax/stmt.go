@@ -13,6 +13,7 @@ type StmtVisitor interface {
 	VisitBreakStmt(*Break) error
 	VisitForDesugaredWhileStmt(*ForDesugaredWhile) error
 	VisitContinueStmt(*Continue) error
+	VisitClassStmt(*Class) error
 }
 
 type Stmt interface {
@@ -167,5 +168,19 @@ func NewContinue(keyword Token) *Continue {
 }
 func (n *Continue) Accept(v StmtVisitor) error {
 	return v.VisitContinueStmt(n)
+}
+
+type Class struct {
+	Name Token
+	Methods []*Function
+}
+func NewClass(name Token, methods []*Function) *Class {
+	return &Class{
+		Name: name,
+		Methods: methods,
+	}
+}
+func (n *Class) Accept(v StmtVisitor) error {
+	return v.VisitClassStmt(n)
 }
 

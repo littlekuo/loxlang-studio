@@ -58,14 +58,6 @@ func (a *Interpreter) define(name syntax.Token, value any) error {
 	}
 }
 
-func (a *Interpreter) assign(expr *syntax.Assign, value interface{}) error {
-	loc, ok := a.localAccess[expr]
-	if ok {
-		return a.env.assignAt(loc.depth, loc.idx, value)
-	}
-	return a.globals.assignGlobal(expr.Name, value)
-}
-
 func (a *Interpreter) GetError() error {
 	return a.interpretErr
 }
@@ -218,6 +210,22 @@ func (a *Interpreter) VisitPrintStmt(stmt *syntax.Print) error {
 	return nil
 }
 
+func (a *Interpreter) VisitClassStmt(stmt *syntax.Class) error {
+	if idx, ok := a.localDefs[stmt.Name]; ok {
+		if err := a.env.defineLocal(idx, nil); err != nil {
+			return err
+		}
+		loxClass := NewLoxClass(stmt.Name.Lexeme)
+		return a.env.assignLocal(idx, loxClass)
+	}
+
+	if err := a.globals.defineGlobal(stmt.Name.Lexeme, nil); err != nil {
+		return err
+	}
+	loxClass := NewLoxClass(stmt.Name.Lexeme)
+	return a.globals.assignGlobal(stmt.Name, loxClass)
+}
+
 func (a *Interpreter) VisitLogicalExpr(expr *syntax.Logical) syntax.Result {
 	left := expr.Left.Accept(a)
 	if left.Err != nil {
@@ -244,7 +252,13 @@ func (a *Interpreter) VisitAssignExpr(expr *syntax.Assign) syntax.Result {
 	if result.Err != nil {
 		return syntax.Result{Err: result.Err}
 	}
-	err := a.assign(expr, result.Value)
+	loc, ok := a.localAccess[expr]
+	var err error
+	if ok {
+		err = a.env.assignAt(loc.depth, loc.idx, result.Value)
+	} else {
+		err = a.globals.assignGlobal(expr.Name, result.Value)
+	}
 	if err != nil {
 		return syntax.Result{Err: err}
 	}
@@ -373,6 +387,40 @@ func (a *Interpreter) VisitCallExpr(expr *syntax.Call) syntax.Result {
 func (a *Interpreter) VisitAnonymousFunctionExpr(expr *syntax.AnonymousFunction) syntax.Result {
 	loxFunc := NewLoxFunction(expr.Decl, a.env)
 	return syntax.Result{Value: loxFunc}
+}
+
+func (a *Interpreter) VisitGetExpr(expr *syntax.Get) syntax.Result {
+	obj := expr.Object.Accept(a)
+	if obj.Err != nil {
+		return syntax.Result{Err: obj.Err}
+	}
+	if objVal, ok := obj.Value.(*LoxInstance); ok {
+		property, gErr := objVal.Get(expr.Name)
+		if gErr != nil {
+			return syntax.Result{Err: gErr}
+		}
+		return syntax.Result{Value: property}
+	}
+	return syntax.Result{Err: errors.New("can only get properties from instance")}
+}
+
+func (a *Interpreter) VisitSetExpr(expr *syntax.Set) syntax.Result {
+	obj := a.executeExpr(expr.Object)
+	if obj.Err != nil {
+		return syntax.Result{Err: obj.Err}
+	}
+	if objVal, ok := obj.Value.(*LoxInstance); ok {
+		value := expr.Value.Accept(a)
+		if value.Err != nil {
+			return syntax.Result{Err: value.Err}
+		}
+		gErr := objVal.Set(expr.Name, value.Value)
+		if gErr != nil {
+			return syntax.Result{Err: gErr}
+		}
+		return syntax.Result{Value: value.Value}
+	}
+	return syntax.Result{Err: errors.New("can only set properties on instances")}
 }
 
 func (a *Interpreter) VisitVariableExpr(expr *syntax.Variable) syntax.Result {

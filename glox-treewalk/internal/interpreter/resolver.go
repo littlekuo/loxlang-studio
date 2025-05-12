@@ -275,6 +275,14 @@ func (r *Resolver) VisitContinueStmt(stmt *syntax.Continue) error {
 	return nil
 }
 
+func (r *Resolver) VisitClassStmt(stmt *syntax.Class) error {
+	if err := r.declare(stmt.Name); err != nil {
+		return err
+	}
+	r.define(stmt.Name)
+	return nil
+}
+
 func (r *Resolver) VisitForDesugaredWhileStmt(stmt *syntax.ForDesugaredWhile) error {
 	result := r.resolveExpr(stmt.Condition)
 	if result.Err != nil {
@@ -352,4 +360,20 @@ func (r *Resolver) VisitAnonymousFunctionExpr(expr *syntax.AnonymousFunction) sy
 		return syntax.Result{Err: err}
 	}
 	return syntax.Result{}
+}
+
+func (r *Resolver) VisitGetExpr(expr *syntax.Get) syntax.Result {
+	result := r.resolveExpr(expr.Object)
+	if result.Err != nil {
+		return result
+	}
+	return syntax.Result{}
+}
+
+func (r *Resolver) VisitSetExpr(expr *syntax.Set) syntax.Result {
+	result := r.resolveExpr(expr.Value)
+	if result.Err != nil {
+		return result
+	}
+	return r.resolveExpr(expr.Object)
 }

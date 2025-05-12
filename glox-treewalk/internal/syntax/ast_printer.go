@@ -69,6 +69,20 @@ func (a *AstPrinter) VisitFunctionStmt(stmt *Function) error {
 	return nil
 }
 
+func (a *AstPrinter) VisitClassStmt(stmt *Class) error {
+	a.desc += indentString(a.ident, "(class "+stmt.Name.Lexeme)
+	a.desc += "\n"
+	a.ident += 2
+	for _, method := range stmt.Methods {
+		if err := a.printStmt(method); err != nil {
+			return err
+		}
+	}
+	a.ident -= 2
+	a.desc += indentString(a.ident, ")")
+	return nil
+}
+
 func (a *AstPrinter) VisitForDesugaredWhileStmt(stmt *ForDesugaredWhile) error {
 	a.desc += indentString(a.ident, "(forDesugared ")
 	a.desc += a.PrintExpr(stmt.Condition)
@@ -179,6 +193,11 @@ func (a *AstPrinter) VisitLiteralExpr(expr *Literal) Result {
 	if expr.Value == nil {
 		return Result{Value: "nil"}
 	}
+
+	if _, ok := expr.Value.(string); ok {
+		return Result{Value: fmt.Sprintf("\"%v\"", expr.Value)}
+	}
+
 	return Result{Value: fmt.Sprintf("%v", expr.Value)}
 }
 
@@ -193,6 +212,16 @@ func (a *AstPrinter) VisitVariableExpr(expr *Variable) Result {
 func (a *AstPrinter) VisitCallExpr(expr *Call) Result {
 	params := append([]Expr{expr.Callee}, expr.Arguments...)
 	return Result{Value: a.parenthesize("call", params...)}
+}
+
+func (a *AstPrinter) VisitGetExpr(expr *Get) Result {
+	return Result{Value: fmt.Sprintf("(%s.%s)", a.PrintExpr(expr.Object), expr.Name.Lexeme)}
+}
+
+func (a *AstPrinter) VisitSetExpr(expr *Set) Result {
+	objectStr := a.PrintExpr(expr.Object)
+	valueStr := a.PrintExpr(expr.Value)
+	return Result{Value: fmt.Sprintf("(set %s.%s %s)", objectStr, expr.Name.Lexeme, valueStr)}
 }
 
 func (a *AstPrinter) VisitAnonymousFunctionExpr(expr *AnonymousFunction) Result {
