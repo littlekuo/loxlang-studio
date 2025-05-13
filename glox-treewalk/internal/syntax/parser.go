@@ -627,6 +627,9 @@ func (p *Parser) parsePrimary() (Expr, error) {
 	if p.match(TOKEN_NIL) {
 		return &Literal{Value: nil}, nil
 	}
+	if p.match(TOKEN_THIS) {
+		return NewThis(p.previous()), nil
+	}
 	if p.match(TOKEN_IDENTIFIER) {
 		return NewVariable(p.previous()), nil
 	}

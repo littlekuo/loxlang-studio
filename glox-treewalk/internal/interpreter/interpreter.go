@@ -96,7 +96,7 @@ func (a *Interpreter) VisitReturnStmt(stmt *syntax.Return) error {
 }
 
 func (a *Interpreter) VisitFunctionStmt(stmt *syntax.Function) error {
-	fn := NewLoxFunction(stmt, a.env)
+	fn := NewLoxFunction(stmt, a.env, false)
 	return a.define(stmt.Name, fn)
 }
 
@@ -211,19 +211,28 @@ func (a *Interpreter) VisitPrintStmt(stmt *syntax.Print) error {
 }
 
 func (a *Interpreter) VisitClassStmt(stmt *syntax.Class) error {
+	methods := make(map[string]*LoxFunction)
+	for _, method := range stmt.Methods {
+		fun := NewLoxFunction(method, a.env, method.Name.Lexeme == "init")
+		methods[method.Name.Lexeme] = fun
+	}
 	if idx, ok := a.localDefs[stmt.Name]; ok {
 		if err := a.env.defineLocal(idx, nil); err != nil {
 			return err
 		}
-		loxClass := NewLoxClass(stmt.Name.Lexeme)
+		loxClass := NewLoxClass(stmt.Name.Lexeme, methods)
 		return a.env.assignLocal(idx, loxClass)
 	}
 
 	if err := a.globals.defineGlobal(stmt.Name.Lexeme, nil); err != nil {
 		return err
 	}
-	loxClass := NewLoxClass(stmt.Name.Lexeme)
+	loxClass := NewLoxClass(stmt.Name.Lexeme, methods)
 	return a.globals.assignGlobal(stmt.Name, loxClass)
+}
+
+func (a *Interpreter) VisitThisExpr(expr *syntax.This) syntax.Result {
+	return a.lookupVariable(expr.Keyword, expr)
 }
 
 func (a *Interpreter) VisitLogicalExpr(expr *syntax.Logical) syntax.Result {
@@ -385,7 +394,7 @@ func (a *Interpreter) VisitCallExpr(expr *syntax.Call) syntax.Result {
 }
 
 func (a *Interpreter) VisitAnonymousFunctionExpr(expr *syntax.AnonymousFunction) syntax.Result {
-	loxFunc := NewLoxFunction(expr.Decl, a.env)
+	loxFunc := NewLoxFunction(expr.Decl, a.env, false)
 	return syntax.Result{Value: loxFunc}
 }
 

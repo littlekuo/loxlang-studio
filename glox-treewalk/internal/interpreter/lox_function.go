@@ -7,14 +7,16 @@ import (
 )
 
 type LoxFunction struct {
-	declaration *syntax.Function
-	closure     *Environment
+	declaration   *syntax.Function
+	closure       *Environment
+	isInitializer bool
 }
 
-func NewLoxFunction(f *syntax.Function, closure *Environment) *LoxFunction {
+func NewLoxFunction(f *syntax.Function, closure *Environment, isInitializer bool) *LoxFunction {
 	return &LoxFunction{
-		declaration: f,
-		closure:     closure,
+		declaration:   f,
+		closure:       closure,
+		isInitializer: isInitializer,
 	}
 }
 
@@ -29,16 +31,25 @@ func (l *LoxFunction) Call(i *Interpreter, args []any) syntax.Result {
 			return syntax.Result{Err: err}
 		}
 	}
+	result := syntax.Result{}
 	for _, stmt := range l.declaration.Body {
 		if err := i.execute(stmt); err != nil {
 			var ret *ErrReturn
 			if errors.As(err, &ret) {
-				return syntax.Result{Value: ret.Value}
+				result.Value = ret.Value
+				break
 			}
 			return syntax.Result{Err: err}
 		}
 	}
-	return syntax.Result{}
+	if l.isInitializer {
+		instance, err := l.closure.getAt(0, 0)
+		if err != nil {
+			return syntax.Result{Err: err}
+		}
+		return syntax.Result{Value: instance}
+	}
+	return result
 }
 
 func (l *LoxFunction) Arity() int {
@@ -50,4 +61,10 @@ func (l *LoxFunction) String() string {
 		return "<anonymous fn>"
 	}
 	return "<fn " + l.declaration.Name.Lexeme + ">"
+}
+
+func (l *LoxFunction) Bind(instance *LoxInstance) *LoxFunction {
+	environment := NewEnvironment(l.closure)
+	environment.defineLocal(0, instance)
+	return NewLoxFunction(l.declaration, environment, l.isInitializer)
 }

@@ -11,6 +11,15 @@ type FuncType int
 const (
 	FuncTypeNone = iota
 	FuncTypeFunction
+	FuncTypeMethod
+	FuncTypeInitializer
+)
+
+type ClassType int
+
+const (
+	ClassTypeNone = iota
+	ClassTypeClass
 )
 
 type VarInfo struct {
@@ -20,17 +29,20 @@ type VarInfo struct {
 }
 
 type Resolver struct {
-	interpreter *Interpreter
-	scopes      []map[string]*VarInfo
-	indices     []int // track indices of local scopes
-	resolveErr  error
-	curFuncType FuncType
+	interpreter  *Interpreter
+	scopes       []map[string]*VarInfo
+	indices      []int // track indices of local scopes
+	resolveErr   error
+	curFuncType  FuncType
+	curClassType ClassType
 }
 
 func NewResolver(interpreter *Interpreter) *Resolver {
 	return &Resolver{
-		interpreter: interpreter,
-		scopes:      make([]map[string]*VarInfo, 0),
+		interpreter:  interpreter,
+		scopes:       make([]map[string]*VarInfo, 0),
+		curFuncType:  FuncTypeNone,
+		curClassType: ClassTypeNone,
 	}
 }
 
@@ -248,6 +260,10 @@ func (r *Resolver) VisitReturnStmt(stmt *syntax.Return) error {
 		return r.resolveErr
 	}
 	if stmt.Value != nil {
+		if r.curFuncType == FuncTypeInitializer {
+			r.resolveErr = fmt.Errorf("can't return a value from an initializer")
+			return r.resolveErr
+		}
 		result := r.resolveExpr(stmt.Value)
 		if result.Err != nil {
 			return result.Err
@@ -276,10 +292,29 @@ func (r *Resolver) VisitContinueStmt(stmt *syntax.Continue) error {
 }
 
 func (r *Resolver) VisitClassStmt(stmt *syntax.Class) error {
+	enclosingClass := r.curClassType
+	r.curClassType = ClassTypeClass
+	defer func() { r.curClassType = enclosingClass }()
 	if err := r.declare(stmt.Name); err != nil {
 		return err
 	}
 	r.define(stmt.Name)
+	r.beginScope()
+	mockThis := syntax.NewToken(syntax.TOKEN_THIS, "this", nil, stmt.Name.Line, stmt.Name.Pos)
+	if err := r.declare(mockThis); err != nil {
+		return err
+	}
+	r.define(mockThis)
+	for _, method := range stmt.Methods {
+		funcType := FuncType(FuncTypeMethod)
+		if method.Name.Lexeme == "init" {
+			funcType = FuncTypeInitializer
+		}
+		if err := r.resolveFunctionStmt(method, funcType); err != nil {
+			return err
+		}
+	}
+	r.endScope()
 	return nil
 }
 
@@ -376,4 +411,12 @@ func (r *Resolver) VisitSetExpr(expr *syntax.Set) syntax.Result {
 		return result
 	}
 	return r.resolveExpr(expr.Object)
+}
+
+func (r *Resolver) VisitThisExpr(expr *syntax.This) syntax.Result {
+	if r.curClassType == ClassTypeNone {
+		return syntax.Result{Err: fmt.Errorf("can't use 'this' outside of a class")}
+	}
+	r.resolveLocal(expr, expr.Keyword)
+	return syntax.Result{}
 }

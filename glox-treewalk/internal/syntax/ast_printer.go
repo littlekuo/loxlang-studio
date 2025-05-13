@@ -224,6 +224,10 @@ func (a *AstPrinter) VisitSetExpr(expr *Set) Result {
 	return Result{Value: fmt.Sprintf("(set %s.%s %s)", objectStr, expr.Name.Lexeme, valueStr)}
 }
 
+func (a *AstPrinter) VisitThisExpr(expr *This) Result {
+	return Result{Value: "this"}
+}
+
 func (a *AstPrinter) VisitAnonymousFunctionExpr(expr *AnonymousFunction) Result {
 	err := a.VisitFunctionStmt(expr.Decl)
 	if err != nil {

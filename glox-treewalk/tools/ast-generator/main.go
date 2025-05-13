@@ -51,6 +51,7 @@ func main() {
 		"Call     : Expr callee, Token paren, []Expr arguments",
 		"Get      : Expr object, Token name",
 		"Set      : Expr object, Token name, Expr value",
+		"This     : Token keyword",
 		"Grouping: Expr expression",
 		"Literal: any value",
 		"Variable : Token name",

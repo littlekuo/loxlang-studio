@@ -14,6 +14,7 @@ type ExprVisitor interface {
 	VisitCallExpr(*Call) Result
 	VisitGetExpr(*Get) Result
 	VisitSetExpr(*Set) Result
+	VisitThisExpr(*This) Result
 	VisitGroupingExpr(*Grouping) Result
 	VisitLiteralExpr(*Literal) Result
 	VisitVariableExpr(*Variable) Result
@@ -128,6 +129,18 @@ func NewSet(object Expr, name Token, value Expr) *Set {
 }
 func (n *Set) Accept(v ExprVisitor) Result {
 	return v.VisitSetExpr(n)
+}
+
+type This struct {
+	Keyword Token
+}
+func NewThis(keyword Token) *This {
+	return &This{
+		Keyword: keyword,
+	}
+}
+func (n *This) Accept(v ExprVisitor) Result {
+	return v.VisitThisExpr(n)
 }
 
 type Grouping struct {

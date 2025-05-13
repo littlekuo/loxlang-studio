@@ -26,6 +26,10 @@ func (i *LoxInstance) Get(name syntax.Token) (interface{}, error) {
 	if value, ok := i.fields[name.Lexeme]; ok {
 		return value, nil
 	}
+	method := i.loxClass.FindMethod(name.Lexeme)
+	if method != nil {
+		return method.Bind(i), nil
+	}
 
 	return nil, fmt.Errorf("undefined property %s", name.Lexeme)
 }
