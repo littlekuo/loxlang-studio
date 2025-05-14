@@ -28,7 +28,8 @@ term           ->  factor ( ( "-" | "+" ) factor )*
 factor         ->  unary ( ( "/" | "*" ) unary )*
 unary          ->  ( "!" | "-" ) unary | call
 call           → primary ( "(" arguments? ")" | "." IDENTIFIER )* ;
-primary        ->  NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" | IDENTIFIER ｜ anonymous_func
+primary        ->  NUMBER | STRING | "false" | "true" | "nil" | "(" expression ")" | IDENTIFIER
+                 | anonymous_func | super "." IDENTIFIER
 anonymous_func ->  "fun" "(" parameters? ")" block
 arguments      ->  expression ( "," expression )* ;
 
@@ -40,7 +41,8 @@ declaration    -> classDecl
                 | statement
 
 
-classDecl      -> "class" IDENTIFIER "{" function* "}" ;
+classDecl      -> "class" IDENTIFIER ( "<" IDENTIFIER )?
+                  "{" function* "}" ;
 funDecl        -> "fun" function
 function       -> IDENTIFIER "(" parameters? ")" block
 parameters     -> IDENTIFIER ( "," IDENTIFIER )*
@@ -118,6 +120,13 @@ func (p *Parser) parseClassDecl() (*Class, error) {
 		return nil, cErr
 	}
 	name := p.previous()
+	var superClass *Variable = nil
+	if p.match(TOKEN_LESS) {
+		if cErr := p.consume(TOKEN_IDENTIFIER, "expect superclass name"); cErr != nil {
+			return nil, cErr
+		}
+		superClass = NewVariable(p.previous())
+	}
 	if p.match(TOKEN_LEFT_BRACE) {
 		methods := make([]*Function, 0)
 		for !p.check(TOKEN_RIGHT_BRACE) && !p.isEnd() {
@@ -130,7 +139,7 @@ func (p *Parser) parseClassDecl() (*Class, error) {
 		if cErr := p.consume(TOKEN_RIGHT_BRACE, "expect '}' after class body"); cErr != nil {
 			return nil, cErr
 		}
-		return NewClass(name, methods), nil
+		return NewClass(name, superClass, methods), nil
 	}
 	return nil, p.error(p.peek(), "expect '{' after class name")
 }
@@ -635,6 +644,16 @@ func (p *Parser) parsePrimary() (Expr, error) {
 	}
 	if p.match(TOKEN_FUN) {
 		return p.parseAnonymousFunction()
+	}
+	if p.match(TOKEN_SUPER) {
+		keyword := p.previous()
+		if err := p.consume(TOKEN_DOT, "expect '.' after 'super'"); err != nil {
+			return nil, err
+		}
+		if err := p.consume(TOKEN_IDENTIFIER, "expect superclass method name"); err != nil {
+			return nil, err
+		}
+		return NewSuper(keyword, p.previous()), nil
 	}
 	if p.match(TOKEN_LEFT_PAREN) {
 		expr, err := p.parseExpr()

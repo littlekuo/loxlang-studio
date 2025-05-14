@@ -172,11 +172,13 @@ func (n *Continue) Accept(v StmtVisitor) error {
 
 type Class struct {
 	Name Token
+	Superclass *Variable
 	Methods []*Function
 }
-func NewClass(name Token, methods []*Function) *Class {
+func NewClass(name Token, superclass *Variable, methods []*Function) *Class {
 	return &Class{
 		Name: name,
+		Superclass: superclass,
 		Methods: methods,
 	}
 }

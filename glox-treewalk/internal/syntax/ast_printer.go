@@ -228,6 +228,10 @@ func (a *AstPrinter) VisitThisExpr(expr *This) Result {
 	return Result{Value: "this"}
 }
 
+func (a *AstPrinter) VisitSuperExpr(expr *Super) Result {
+	return Result{Value: fmt.Sprintf("super.%s", expr.Method.Lexeme)}
+}
+
 func (a *AstPrinter) VisitAnonymousFunctionExpr(expr *AnonymousFunction) Result {
 	err := a.VisitFunctionStmt(expr.Decl)
 	if err != nil {

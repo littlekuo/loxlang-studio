@@ -14,6 +14,7 @@ type ExprVisitor interface {
 	VisitCallExpr(*Call) Result
 	VisitGetExpr(*Get) Result
 	VisitSetExpr(*Set) Result
+	VisitSuperExpr(*Super) Result
 	VisitThisExpr(*This) Result
 	VisitGroupingExpr(*Grouping) Result
 	VisitLiteralExpr(*Literal) Result
@@ -129,6 +130,20 @@ func NewSet(object Expr, name Token, value Expr) *Set {
 }
 func (n *Set) Accept(v ExprVisitor) Result {
 	return v.VisitSetExpr(n)
+}
+
+type Super struct {
+	Keyword Token
+	Method Token
+}
+func NewSuper(keyword Token, method Token) *Super {
+	return &Super{
+		Keyword: keyword,
+		Method: method,
+	}
+}
+func (n *Super) Accept(v ExprVisitor) Result {
+	return v.VisitSuperExpr(n)
 }
 
 type This struct {

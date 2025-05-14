@@ -20,6 +20,7 @@ type ClassType int
 const (
 	ClassTypeNone = iota
 	ClassTypeClass
+	ClassTypeSubclass
 )
 
 type VarInfo struct {
@@ -84,7 +85,7 @@ func (r *Resolver) beginScope() {
 func (r *Resolver) endScope() error {
 	curScope := r.scopes[len(r.scopes)-1]
 	for name, info := range curScope {
-		if info.defined && !info.used {
+		if name != "this" && name != "super" && info.defined && !info.used {
 			return fmt.Errorf("variable [%s] is not used in local", name)
 		}
 	}
@@ -299,6 +300,21 @@ func (r *Resolver) VisitClassStmt(stmt *syntax.Class) error {
 		return err
 	}
 	r.define(stmt.Name)
+	if stmt.Superclass != nil && stmt.Name.Lexeme == stmt.Superclass.Name.Lexeme {
+		return fmt.Errorf("class %s can't inherit from itself", stmt.Name.Lexeme)
+	}
+	if stmt.Superclass != nil {
+		r.curClassType = ClassTypeSubclass
+		if ret := r.resolveExpr(stmt.Superclass); ret.Err != nil {
+			return ret.Err
+		}
+		r.beginScope()
+		super := syntax.NewToken(syntax.TOKEN_SUPER, "super", nil, stmt.Superclass.Name.Line, stmt.Superclass.Name.Pos)
+		if err := r.declare(super); err != nil {
+			return err
+		}
+		r.define(super)
+	}
 	r.beginScope()
 	mockThis := syntax.NewToken(syntax.TOKEN_THIS, "this", nil, stmt.Name.Line, stmt.Name.Pos)
 	if err := r.declare(mockThis); err != nil {
@@ -314,7 +330,14 @@ func (r *Resolver) VisitClassStmt(stmt *syntax.Class) error {
 			return err
 		}
 	}
-	r.endScope()
+	if err := r.endScope(); err != nil {
+		return err
+	}
+	if stmt.Superclass != nil {
+		if err := r.endScope(); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -416,6 +439,16 @@ func (r *Resolver) VisitSetExpr(expr *syntax.Set) syntax.Result {
 func (r *Resolver) VisitThisExpr(expr *syntax.This) syntax.Result {
 	if r.curClassType == ClassTypeNone {
 		return syntax.Result{Err: fmt.Errorf("can't use 'this' outside of a class")}
+	}
+	r.resolveLocal(expr, expr.Keyword)
+	return syntax.Result{}
+}
+
+func (r *Resolver) VisitSuperExpr(expr *syntax.Super) syntax.Result {
+	if r.curClassType == ClassTypeNone {
+		return syntax.Result{Err: fmt.Errorf("can't use 'super' outside of a class")}
+	} else if r.curClassType != ClassTypeSubclass {
+		return syntax.Result{Err: fmt.Errorf("can't use 'super' in a class with no superclass")}
 	}
 	r.resolveLocal(expr, expr.Keyword)
 	return syntax.Result{}

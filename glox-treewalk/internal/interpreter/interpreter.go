@@ -211,24 +211,56 @@ func (a *Interpreter) VisitPrintStmt(stmt *syntax.Print) error {
 }
 
 func (a *Interpreter) VisitClassStmt(stmt *syntax.Class) error {
+	var superClass *LoxClass
+	if stmt.Superclass != nil {
+		result := a.executeExpr(stmt.Superclass)
+		if result.Err != nil {
+			return result.Err
+		}
+		var ok bool
+		superClass, ok = result.Value.(*LoxClass)
+		if !ok {
+			return fmt.Errorf("superclass [%s] must be a class", stmt.Superclass.Name.Lexeme)
+		}
+	}
+
+	if idx, ok := a.localDefs[stmt.Name]; ok {
+		if err := a.env.defineLocal(idx, nil); err != nil {
+			return err
+		}
+		if superClass != nil {
+			a.env = NewEnvironment(a.env)
+			a.env.defineLocal(0, superClass)
+		}
+		methods := make(map[string]*LoxFunction)
+		for _, method := range stmt.Methods {
+			fun := NewLoxFunction(method, a.env, method.Name.Lexeme == "init")
+			methods[method.Name.Lexeme] = fun
+		}
+		loxClass := NewLoxClass(stmt.Name.Lexeme, superClass, methods)
+		if superClass != nil {
+			a.env = a.env.enclosing
+		}
+		return a.env.assignLocal(idx, loxClass)
+	}
+
+	if err := a.env.defineGlobal(stmt.Name.Lexeme, nil); err != nil {
+		return err
+	}
+	if superClass != nil {
+		a.env = NewEnvironment(a.env)
+		a.env.defineLocal(0, superClass)
+	}
 	methods := make(map[string]*LoxFunction)
 	for _, method := range stmt.Methods {
 		fun := NewLoxFunction(method, a.env, method.Name.Lexeme == "init")
 		methods[method.Name.Lexeme] = fun
 	}
-	if idx, ok := a.localDefs[stmt.Name]; ok {
-		if err := a.env.defineLocal(idx, nil); err != nil {
-			return err
-		}
-		loxClass := NewLoxClass(stmt.Name.Lexeme, methods)
-		return a.env.assignLocal(idx, loxClass)
+	loxClass := NewLoxClass(stmt.Name.Lexeme, superClass, methods)
+	if superClass != nil {
+		a.env = a.env.enclosing
 	}
-
-	if err := a.globals.defineGlobal(stmt.Name.Lexeme, nil); err != nil {
-		return err
-	}
-	loxClass := NewLoxClass(stmt.Name.Lexeme, methods)
-	return a.globals.assignGlobal(stmt.Name, loxClass)
+	return a.env.assignGlobal(stmt.Name, loxClass)
 }
 
 func (a *Interpreter) VisitThisExpr(expr *syntax.This) syntax.Result {
@@ -449,6 +481,33 @@ func (a *Interpreter) lookupVariable(name syntax.Token, expr syntax.Expr) syntax
 		return syntax.Result{Err: err}
 	}
 	return syntax.Result{Value: obj}
+}
+
+func (a *Interpreter) VisitSuperExpr(expr *syntax.Super) syntax.Result {
+	loc, ok := a.localAccess[expr]
+	if !ok {
+		return syntax.Result{Err: errors.New("no super class")}
+	}
+	class, err := a.env.getAt(loc.depth, loc.idx)
+	if err != nil {
+		return syntax.Result{Err: err}
+	}
+	superClass, ok := class.(*LoxClass)
+	if ok {
+		obj, err := a.env.getAt(loc.depth-1, loc.idx)
+		if err != nil {
+			return syntax.Result{Err: err}
+		}
+		if instance, ok := obj.(*LoxInstance); ok {
+			method := superClass.FindMethod(expr.Method.Lexeme)
+			if method == nil {
+				return syntax.Result{Err: fmt.Errorf("undefined method '%s'", expr.Method.Lexeme)}
+			}
+			return syntax.Result{Value: method.Bind(instance)}
+		}
+		return syntax.Result{Err: errors.New("instance of LoxClass expected")}
+	}
+	return syntax.Result{Err: errors.New("no super class")}
 }
 
 func isTruthy(value interface{}) bool {

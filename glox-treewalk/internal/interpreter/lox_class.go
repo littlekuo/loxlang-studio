@@ -3,12 +3,13 @@ package interpreter
 import "github.com/littlekuo/glox-treewalk/internal/syntax"
 
 type LoxClass struct {
-	name    string
-	methods map[string]*LoxFunction
+	name       string
+	superClass *LoxClass
+	methods    map[string]*LoxFunction
 }
 
-func NewLoxClass(name string, methods map[string]*LoxFunction) *LoxClass {
-	return &LoxClass{name: name, methods: methods}
+func NewLoxClass(name string, superClass *LoxClass, methods map[string]*LoxFunction) *LoxClass {
+	return &LoxClass{name: name, superClass: superClass, methods: methods}
 }
 
 func (c *LoxClass) String() string {
@@ -34,6 +35,9 @@ func (c *LoxClass) Call(interpreter *Interpreter, args []interface{}) syntax.Res
 func (c *LoxClass) FindMethod(methodName string) *LoxFunction {
 	if method, ok := c.methods[methodName]; ok {
 		return method
+	}
+	if c.superClass != nil {
+		return c.superClass.FindMethod(methodName)
 	}
 	return nil
 }

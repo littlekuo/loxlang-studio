@@ -51,6 +51,7 @@ func main() {
 		"Call     : Expr callee, Token paren, []Expr arguments",
 		"Get      : Expr object, Token name",
 		"Set      : Expr object, Token name, Expr value",
+		"Super    : Token keyword, Token method",
 		"This     : Token keyword",
 		"Grouping: Expr expression",
 		"Literal: any value",
@@ -71,7 +72,7 @@ func main() {
 		"Break      : Token keyword",
 		"ForDesugaredWhile: Expr condition, Stmt body, Expr increment",
 		"Continue   : Token keyword",
-		"Class      : Token name, []*Function methods",
+		"Class      : Token name, *Variable superclass, []*Function methods",
 	}, "error"); err != nil {
 		log.Fatal(err)
 	}
