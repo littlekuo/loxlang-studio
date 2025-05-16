@@ -1,11 +1,14 @@
 #ifndef EXPR_H
 #define EXPR_H
 
+#include "ast/lox_value.h"
 #include "parser/token.h"
 #include <iostream>
 #include <memory>
 #include <string>
 #include <variant>
+#include <optional>
+#include "llvm/IR/Value.h"
 
 /**
 expression     → equality ;
@@ -19,7 +22,7 @@ primary        → NUMBER | STRING | "true" | "false" | "nil"
                | "(" expression ")" ;
 */
 
-using ExprResult = std::variant<bool, double, std::string, void *>;
+using ExprResult = std::variant<LoxValue, llvm::Value*, std::monostate>;
 
 class BinaryExpr;
 class GroupingExpr;
@@ -38,7 +41,7 @@ public:
 class Expr {
 public:
   virtual ~Expr() = default;
-  virtual ExprResult accept(class ExprVisitor &visitor) = 0;
+  virtual ExprResult accept(class ExprVisitor &visitor) const = 0;
 };
 
 class BinaryExpr : public Expr {
@@ -49,8 +52,11 @@ private:
 
 public:
   BinaryExpr(std::unique_ptr<Expr> left, std::unique_ptr<Expr> right,
-             Token&& op);
-  virtual ExprResult accept(class ExprVisitor &visitor);
+             Token &&op);
+  const Token &get_op() const;
+  const Expr &get_left() const;
+  const Expr &get_right() const;
+  virtual ExprResult accept(class ExprVisitor &visitor) const override;
 };
 
 class GroupingExpr : public Expr {
@@ -59,7 +65,8 @@ private:
 
 public:
   GroupingExpr(std::unique_ptr<Expr> expr);
-  virtual ExprResult accept(class ExprVisitor &visitor);
+  const Expr &get_expr() const;
+  virtual ExprResult accept(class ExprVisitor &visitor) const override;
 };
 
 class LiteralExpr : public Expr {
@@ -68,8 +75,10 @@ private:
   Token token_;
 
 public:
-  LiteralExpr(ExprResult&& value, Token&& token);
-  virtual ExprResult accept(class ExprVisitor &visitor);
+  LiteralExpr(ExprResult &&value, Token &&token);
+  const Token &get_token() const;
+  const ExprResult &get_value() const;
+  virtual ExprResult accept(class ExprVisitor &visitor) const override;
 };
 
 class UnaryExpr : public Expr {
@@ -78,8 +87,10 @@ private:
   Token op_;
 
 public:
-  UnaryExpr(std::unique_ptr<Expr> right, Token&& op);
-  virtual ExprResult accept(class ExprVisitor &visitor);
+  UnaryExpr(std::unique_ptr<Expr> right, Token &&op);
+  const Token &get_op() const;
+  const Expr &get_right() const;
+  virtual ExprResult accept(class ExprVisitor &visitor) const override;
 };
 
 #endif

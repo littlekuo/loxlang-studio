@@ -9,6 +9,7 @@ class Parser {
 public:
   explicit Parser(std::vector<Token> tokens);
   bool has_error() const { return has_error_; }
+  std::unique_ptr<Expr> parse();
 
 private:
   std::vector<Token> tokens_;
@@ -30,6 +31,7 @@ private:
   bool is_at_end();
   Token peek();
   void error(Token token, std::string message);
+  void synchronize();
 };
 
 #endif
